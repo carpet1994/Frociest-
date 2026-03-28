@@ -9,7 +9,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3
 source.include_patterns = Images/*.png,Images/Arena/*.png,Audio/*.ogg,Audio/*.mp3,PG/Preview/*.png,PG/Jules/*.gif,PG/Poz/*.gif,PG/Ruben/*.gif,icon.png
 
-version = 0.2.1
+version = 0.1
 
 requirements = python3,pygame_ce,android,pyjnius,pillow
 
@@ -17,6 +17,8 @@ orientation = landscape
 android.orientation = landscape
 
 fullscreen = 1
+
+icon.filename = %(source.dir)s/icon.png
 
 android.permissions = INTERNET
 android.api = 33
