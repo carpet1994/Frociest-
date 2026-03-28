@@ -41,7 +41,7 @@ jobs:
       - name: Installa Buildozer e Cython
         run: |
           pip3 install --upgrade pip setuptools
-          pip3 install buildozer cython virtualenv
+          pip3 install buildozer "cython==0.29.37" virtualenv
 
       - name: Cache Android SDK/NDK e dipendenze Buildozer
         uses: actions/cache@v4
