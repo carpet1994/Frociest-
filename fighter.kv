@@ -1,3 +1,5 @@
+#:import Window kivy.core.window.Window
+
 <RoundButton>:
     canvas.before:
         Color:
@@ -15,11 +17,12 @@
 
 
 <FighterGame>:
-    player: player_id
-    enemy:  enemy_id
+    player:   player_id
+    enemy:    enemy_id
     joystick: joystick_id
     hitbox:   hitbox_id
 
+    # ── SFONDO ─────────────────────────────────────────────────
     canvas.before:
         Color:
             rgba: 1, 1, 1, 1
@@ -27,81 +30,85 @@
             source: self.bg_source
             size: self.size
             pos: self.pos
-        # ── OMBRA GIOCATORE ──
+        # Ombre
         Color:
             rgba: 0, 0, 0, 0.35
         Ellipse:
             pos: self.player_x + 80, 35
             size: 340, 60
-        # ── OMBRA NEMICO ──
         Color:
             rgba: 0, 0, 0, 0.35
         Ellipse:
             pos: self.enemy_x + 80, 35
             size: 340, 60
 
-    # ── GIOCATORE ──────────────────────────────────────────────
+    # ── FIGHTER PLAYER (solo hitbox logica, niente canvas) ─────
     Fighter:
         id: player_id
         size: 500, 500
         pos: 200, 50
 
-        Image:
-            source: player_id.current_source
-            size: player_id.size
-            pos: player_id.pos
-            anim_delay: 0.1
-            anim_loop: 0
-            allow_stretch: True
-            opacity: 1 if self.texture else 0
-
-            canvas.before:
-                Color:
-                    rgba: 1, 1, 1, 1
-                PushMatrix
-                Scale:
-                    x: player_id.scale_x
-                    origin: self.center
-            canvas.after:
-                PopMatrix
+    # ── IMMAGINE PLAYER (separata, fuori dal Fighter) ──────────
+    Image:
+        id: player_img
+        source: player_id.current_source
+        size: player_id.size
+        pos: player_id.pos
+        anim_delay: 0.08
+        anim_loop: True
+        allow_stretch: True
+        keep_ratio: False
+        canvas.before:
+            PushMatrix
+            Scale:
+                x: player_id.scale_x
+                y: 1
+                origin: self.center
+        canvas.after:
+            PopMatrix
 
     Widget:
         id: hitbox_id
         size: 0, 0
         pos: -1000, -1000
 
-    # ── NEMICO ─────────────────────────────────────────────────
+    # ── FIGHTER ENEMY ──────────────────────────────────────────
     Fighter:
         id: enemy_id
         size: 500, 500
         pos: root.width - 700, 50
 
-        # Placeholder: rettangolo colorato
-        canvas.after:
+    # ── PLACEHOLDER NEMICO (rettangolo colorato) ────────────────
+    Widget:
+        size: enemy_id.size
+        pos: enemy_id.pos
+        opacity: 1 if root.enemy_is_placeholder else 0
+        canvas:
             Color:
-                rgba: root.enemy_placeholder_color if root.enemy_is_placeholder else (0,0,0,0)
+                rgba: root.enemy_placeholder_color
             Rectangle:
-                pos: enemy_id.pos
-                size: enemy_id.size
+                pos: self.pos
+                size: self.size
 
-        Image:
-            source: root.enemy_source if not root.enemy_is_placeholder else ''
-            size: enemy_id.size
-            pos: enemy_id.pos
-            anim_delay: 0.1
-            anim_loop: 0
-            allow_stretch: True
-            opacity: 0 if root.enemy_is_placeholder else 1
-
-            canvas.before:
-                Color:
-                    rgba: 1, 1, 1, 1
-                PushMatrix
-                Scale:
-                    x: enemy_id.scale_x
-                    origin: self.center
-            canvas.after:
-                PopMatrix
+    # ── IMMAGINE ENEMY (separata, fuori dal Fighter) ───────────
+    Image:
+        id: enemy_img
+        source: root.enemy_source if not root.enemy_is_placeholder else ''
+        size: enemy_id.size
+        pos: enemy_id.pos
+        anim_delay: 0.08
+        anim_loop: True
+        allow_stretch: True
+        keep_ratio: False
+        opacity: 0 if root.enemy_is_placeholder else 1
+        canvas.before:
+            PushMatrix
+            Scale:
+                x: enemy_id.scale_x
+                y: 1
+                origin: self.center
+        canvas.after:
+            PopMatrix
 
     # ── BARRA HP GIOCATORE ─────────────────────────────────────
     Widget:
@@ -116,10 +123,10 @@
             Color:
                 rgba: (0, 0.85, 0, 1) if player_id.hp > 125 else ((1, 0.85, 0, 1) if player_id.hp > 25 else (0.9, 0.1, 0.1, 1))
             Rectangle:
-                size: max(0, (root.width / 2 - 120) * player_id.hp / 250), 40
+                size: max(0, (root.width / 2 - 120) * player_id.hp / 250.0), 40
                 pos: self.pos
 
-    # ── PALLINI VITTORIE GIOCATORE (max 3) ────────────────────
+    # ── PALLINI VITTORIE GIOCATORE ────────────────────────────
     Widget:
         size: 30, 30
         pos: 30, root.height - 120
@@ -149,7 +156,6 @@
                 pos: self.pos
                 size: self.size
 
-
     # ── BARRA HP NEMICO ────────────────────────────────────────
     Widget:
         size: root.width / 2 - 120, 40
@@ -163,10 +169,10 @@
             Color:
                 rgba: (0, 0.85, 0, 1) if enemy_id.hp > 125 else ((1, 0.85, 0, 1) if enemy_id.hp > 25 else (0.9, 0.1, 0.1, 1))
             Rectangle:
-                size: max(0, (root.width / 2 - 120) * enemy_id.hp / 250), 40
+                size: max(0, (root.width / 2 - 120) * enemy_id.hp / 250.0), 40
                 pos: self.pos
 
-    # ── PALLINI VITTORIE NEMICO (max 3) ───────────────────────
+    # ── PALLINI VITTORIE NEMICO ───────────────────────────────
     Widget:
         size: 30, 30
         pos: root.width - 60, root.height - 120
@@ -196,10 +202,8 @@
                 pos: self.pos
                 size: self.size
 
-
     # ── TIMER ──────────────────────────────────────────────────
     Label:
-        id: timer_label
         text: root.timer_text
         font_size: 48
         bold: True
@@ -209,7 +213,7 @@
 
     # ── COUNTDOWN ──────────────────────────────────────────────
     Image:
-        source: root.countdown_image
+        source: root.countdown_image if root.countdown_image else ''
         size_hint: None, None
         size: root.width * 0.35, root.width * 0.35
         pos: root.width * 0.325, root.height / 2 - root.width * 0.175
@@ -219,7 +223,7 @@
 
     # ── VINCITORE DEL ROUND ────────────────────────────────────
     Image:
-        source: root.winner_image
+        source: root.winner_image if root.winner_image else ''
         size_hint: None, None
         size: root.width * 0.7, root.width * 0.7 * 0.4
         pos: root.width * 0.15, root.height / 2 - root.width * 0.14
@@ -230,7 +234,7 @@
     # ── JOYSTICK ───────────────────────────────────────────────
     Joystick:
         id: joystick_id
-        size_hint: 0.5, 1
+        size: root.width * 0.5, root.height
         pos: 0, 0
         canvas:
             Color:
@@ -241,14 +245,10 @@
             Color:
                 rgba: 1, 1, 1, (0.55 if self.active else 0)
             Ellipse:
-                pos: self.knob_pos[0]-40, self.knob_pos[1]-40
+                pos: self.knob_pos[0] - 40, self.knob_pos[1] - 40
                 size: 80, 80
 
-    # ── PULSANTI AZIONE (a metà altezza, destra) ───────────────
-    # Layout diamond: Y (su/giallo), X (sinistra/blu), B (destra/rosso), A (giù/verde)
-    # Centro diamante: root.width - 255, root.height / 2
-
-    # Y - SALTO (in alto, giallo)
+    # ── PULSANTI AZIONE ────────────────────────────────────────
     RoundButton:
         id: btn_jump
         text: "Y"
@@ -258,7 +258,6 @@
         size: 110, 110
         pos: root.width - 255, root.height / 2 + 120
 
-    # X - PUGNO (a sinistra, blu)
     RoundButton:
         id: btn_punch
         text: "X"
@@ -268,7 +267,6 @@
         size: 110, 110
         pos: root.width - 365, root.height / 2
 
-    # B - CALCIO (a destra, rosso)
     RoundButton:
         id: btn_kick
         text: "B"
@@ -278,7 +276,6 @@
         size: 110, 110
         pos: root.width - 145, root.height / 2
 
-    # A - ACCOVACCIATI (in basso, verde)
     RoundButton:
         id: btn_crouch
         text: "A"
@@ -288,7 +285,7 @@
         size: 110, 110
         pos: root.width - 255, root.height / 2 - 120
 
-    # ── PULSANTE PAUSA (angolo alto destra) ────────────────────
+    # ── PULSANTE PAUSA ─────────────────────────────────────────
     Widget:
         id: btn_pause
         size_hint: None, None
@@ -303,7 +300,6 @@
                 size: self.size
             Color:
                 rgba: 1, 1, 1, 0.8
-            # Due barre pause
             Rectangle:
                 pos: self.x + 22, self.y + 18
                 size: 12, 44
@@ -311,9 +307,9 @@
                 pos: self.x + 46, self.y + 18
                 size: 12, 44
 
-    # ── MENÙ PAUSA ─────────────────────────────────────────────
+    # ── OVERLAY PAUSA ──────────────────────────────────────────
     Widget:
-        size: root.width, root.height
+        size: root.size
         pos: root.pos
         opacity: 1 if root.paused else 0
         canvas.before:
@@ -327,7 +323,7 @@
         text: "PAUSE"
         font_size: 72
         bold: True
-        color: 1, 1, 0, root.paused and 1 or 0
+        color: 1, 1, 0, 1 if root.paused else 0
         size: root.width, 100
         pos: root.x, root.height * 0.72
 
@@ -393,3 +389,9 @@
             color: 1, 1, 1, 1
             size: self.parent.size
             pos: self.parent.pos
+
+<GameScreen>:
+    FighterGame:
+        id: game_widget
+        size: root.size
+        pos: root.pos

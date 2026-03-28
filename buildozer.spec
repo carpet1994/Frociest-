@@ -11,7 +11,7 @@ source.include_patterns = Images/*.png,Images/Arena/*.png,Audio/*.ogg,Audio/*.mp
 
 version = 0.1
 
-requirements = python3,kivy==2.3.0,sdl2_ttf==2.0.15
+requirements = python3,kivy==2.3.0,sdl2_ttf==2.0.15,android,pyjnius
 
 orientation = landscape
 android.orientation = landscape
@@ -24,9 +24,6 @@ android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
 android.archs = arm64-v8a, armeabi-v7a
-
-# Icona app (se presente)
-# icon.filename = %(source.dir)s/icon.png
 
 [buildozer]
 log_level = 2
