@@ -1,0 +1,67 @@
+name: Frociest Rumble - Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+
+      - name: Checkout codice
+        uses: actions/checkout@v3
+
+      - name: Installa dipendenze di sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            build-essential \
+            git \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            liblzma-dev \
+            libbz2-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            openjdk-17-jdk \
+            unzip \
+            autoconf \
+            libtool \
+            pkg-config \
+            libltdl-dev \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev
+
+      - name: Installa Buildozer, Cython e dipendenze Python
+        run: |
+          pip3 install --upgrade pip
+          pip3 install buildozer cython pillow
+
+      - name: Cache Android SDK/NDK e dipendenze Buildozer
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+          key: buildozer-pygame-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-pygame-
+
+      - name: Compila APK
+        run: |
+          buildozer -v android debug
+
+      - name: Carica APK come artefatto scaricabile
+        uses: actions/upload-artifact@v3
+        with:
+          name: FrociestRumble-beta0.1
+          path: bin/*.apk
+          retention-days: 30
