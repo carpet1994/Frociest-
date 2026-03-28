@@ -1,6 +1,6 @@
 [app]
 title = Frociest Rumble
-package.name = frociеstrumble
+package.name = frociestRumble
 package.domain = org.tappetovolante
 
 author = Tappeto Volante
