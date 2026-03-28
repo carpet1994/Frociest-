@@ -9,8 +9,6 @@ from kivy.core.audio import SoundLoader
 from kivy.vector import Vector
 from kivy.lang import Builder
 
-Window.rotation = 90
-
 Builder.load_file('menu.kv')
 Builder.load_file('fighter.kv')
 
@@ -59,11 +57,11 @@ CHARACTERS = [
         'placeholder': False,
         'placeholder_color': None,
     },
-    {'name': '???', 'placeholder': True, 'placeholder_color': [0.9, 0.7, 0.1,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'mirror': False},
-    {'name': '???', 'placeholder': True, 'placeholder_color': [0.8, 0.3, 0.9,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'mirror': False},
-    {'name': '???', 'placeholder': True, 'placeholder_color': [0.1, 0.8, 0.8,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'mirror': False},
-    {'name': '???', 'placeholder': True, 'placeholder_color': [0.95, 0.5, 0.1, 1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'mirror': False},
-    {'name': '???', 'placeholder': True, 'placeholder_color': [0.5, 0.5, 0.5,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'mirror': False},
+    {'name': '???', 'placeholder': True, 'placeholder_color': [0.9, 0.7, 0.1,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'punch': '', 'kick': '', 'mirror': False},
+    {'name': '???', 'placeholder': True, 'placeholder_color': [0.8, 0.3, 0.9,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'punch': '', 'kick': '', 'mirror': False},
+    {'name': '???', 'placeholder': True, 'placeholder_color': [0.1, 0.8, 0.8,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'punch': '', 'kick': '', 'mirror': False},
+    {'name': '???', 'placeholder': True, 'placeholder_color': [0.95, 0.5, 0.1, 1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'punch': '', 'kick': '', 'mirror': False},
+    {'name': '???', 'placeholder': True, 'placeholder_color': [0.5, 0.5, 0.5,  1], 'fullbody': '', 'preview': '', 'idle': '', 'walk': '', 'jump': '', 'punch': '', 'kick': '', 'mirror': False},
 ]
 
 # Impostazioni globali del gioco
@@ -204,7 +202,6 @@ class FighterGame(Widget):
     bg_source       = StringProperty('Images/Arena/wallpaper.png')
     countdown_image = StringProperty('')
 
-    # Testo vittoria round
     winner_image = StringProperty('')
 
     player_wins  = NumericProperty(0)
@@ -232,7 +229,6 @@ class FighterGame(Widget):
     _round_active   = False
     _round_ending   = False
 
-    # Nomi personaggi per il testo vittoria
     _player_name = ''
     _enemy_name  = ''
 
@@ -298,7 +294,7 @@ class FighterGame(Widget):
             e.anim_kick    = char.get('kick', '')
             e.current_source = char['idle']
             e.mirror_default = char['mirror']
-            e.facing_left    = True   # nemico parte a destra, guarda a sinistra
+            e.facing_left    = True
         self._enemy_name = char['name']
 
         self._round_duration = GAME_SETTINGS['timer']
@@ -435,7 +431,6 @@ class FighterGame(Widget):
             if self._time_left <= 0:
                 self._time_left = 0
                 self.timer_text = '0'
-                # Vince chi ha la percentuale HP più alta
                 player_pct = self.player.hp / 250.0
                 enemy_pct  = self.enemy.hp  / 250.0
                 if player_pct >= enemy_pct:
@@ -464,19 +459,12 @@ class FighterGame(Widget):
         p = self.player
         e = self.enemy
 
-        # ── Hitbox del PLAYER (chi attacca) = corpo del player
-        # ── Damagebox del NEMICO (chi riceve) = corpo del nemico
-        # Il pugno colpisce solo la parte alta (y > ground_y + 80), evitabile accovacciandosi
-        # Il calcio colpisce solo la parte bassa (y <= ground_y + 150), evitabile saltando
-
         if p.is_attacking:
-            # Hitbox: corpo del player
             p_left  = p.x
             p_right = p.x + p.width
             p_bot   = p.y
             p_top   = p.y + p.height
 
-            # Damagebox: corpo del nemico (ridotto al 40% centrale per precisione)
             margin_x = e.width * 0.30
             e_left   = e.x + margin_x
             e_right  = e.x + e.width - margin_x
@@ -488,15 +476,12 @@ class FighterGame(Widget):
 
             if overlap_x and overlap_y:
                 if p.attack_type == "punch":
-                    # Pugno colpisce zona alta: evitabile accovacciandosi
                     if not e.is_crouching:
                         e.hp -= 1
                 elif p.attack_type == "kick":
-                    # Calcio colpisce zona bassa: evitabile saltando
                     if e.y <= e.ground_y:
                         e.hp -= 1
 
-        # ── Stesso sistema simmetrico: il NEMICO colpisce il PLAYER
         if e.is_attacking:
             margin_x = p.width * 0.30
             p_left   = p.x + margin_x
@@ -534,15 +519,12 @@ class FighterGame(Widget):
         if not p or not e:
             return
 
-        import random
-
         self._ai_timer        += dt
         self._ai_action_timer += dt
         self._ai_crouch_timer += dt
 
-        dist = p.x - e.x  # positivo → player alla destra del nemico
+        dist = p.x - e.x
 
-        # ── Movimento: avvicinati se lontano, allontanati se troppo vicino
         if abs(dist) > 350:
             self._ai_dir = 1 if dist > 0 else -1
         elif abs(dist) < 120:
@@ -551,31 +533,24 @@ class FighterGame(Widget):
             self._ai_dir = 0
 
         e.apply_physics(self._ai_dir, opponent_x=p.center_x)
-        # Limiti arena
         if e.x < 0:            e.x = 0
         if e.right > self.width: e.right = self.width
 
-        # ── Ogni ~0.8s: decisione azione
         if self._ai_action_timer >= 0.8:
             self._ai_action_timer = 0.0
             roll = random.random()
 
             if abs(dist) < 420 and not e.is_attacking:
                 if roll < 0.35:
-                    # Attacco
                     atype = random.choice(["punch", "kick"])
                     self._do_enemy_attack(atype)
                 elif roll < 0.55:
-                    # Salto
                     e.jump()
                 elif roll < 0.70:
-                    # Accovacciati brevemente
                     e.is_crouching = True
                     e.height = 300
                     self._ai_crouch_timer = 0.0
-                # altrimenti rimane fermo
 
-        # ── Alzati dopo ~0.4s di accovacciamento
         if e.is_crouching and self._ai_crouch_timer >= 0.4:
             e.is_crouching = False
             e.height = 500
@@ -634,12 +609,10 @@ class MenuScreen(Screen):
 
 
 class OptionsScreen(Screen):
-    # Valori temporanei (non ancora salvati)
     tmp_music_on = BooleanProperty(True)
     tmp_timer    = NumericProperty(90)
     tmp_rounds   = NumericProperty(3)
 
-    # Dialogo di conferma indietro-senza-salvare
     show_confirm = BooleanProperty(False)
 
     def on_enter(self):
@@ -674,10 +647,6 @@ class OptionsScreen(Screen):
     def _toggle_music_off(self, widget, touch):
         if widget.collide_point(*touch.pos) and not self.show_confirm:
             self.tmp_music_on = False
-
-    def _toggle_music(self, widget, touch):
-        if widget.collide_point(*touch.pos) and not self.show_confirm:
-            self.tmp_music_on = not self.tmp_music_on
 
     def _set_timer(self, widget, touch, value):
         if widget.collide_point(*touch.pos) and not self.show_confirm:
@@ -774,7 +743,6 @@ class CharSelectScreen(Screen):
     def _update_selection(self):
         if 'char_name_label' not in self.ids:
             return
-        target = self.ids[self._char_ids[self.selected]]
         char = CHARACTERS[self.selected]
         if not char['placeholder']:
             self.ids.char_name_label.text = char['name']
@@ -837,7 +805,6 @@ class CharSelectScreen(Screen):
             self.manager.current = 'menu'
 
 
-
 class ArenaSelectScreen(Screen):
     selected      = NumericProperty(0)
     selected_char = NumericProperty(0)
@@ -898,7 +865,6 @@ class GameScreen(Screen):
         game._round_ending   = False
         game._setup_player()
         game._setup_enemy()
-        # Reset fighter positions
         game.player.hp = 250
         game.player.x  = 200
         game.player.y  = game.player.ground_y
@@ -948,10 +914,8 @@ class GameApp(App):
                 continue
 
     def start_combat_music(self):
-        # Ferma la musica del menu
         if self._music and self._music.state == 'play':
             self._music.stop()
-        # Carica e avvia la musica combat
         if not self._combat:
             try:
                 sound = SoundLoader.load('Audio/combat.ogg')
@@ -966,7 +930,6 @@ class GameApp(App):
     def stop_combat_music(self):
         if self._combat and self._combat.state == 'play':
             self._combat.stop()
-        # Riprendi la musica del menu se abilitata
         if self._music and GAME_SETTINGS['music_on']:
             self._music.play()
 

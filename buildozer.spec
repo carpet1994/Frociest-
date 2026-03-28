@@ -7,24 +7,27 @@ author = Tappeto Volante
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3
+source.include_patterns = Images/*.png,Images/Arena/*.png,Audio/*.ogg,Audio/*.mp3,PG/Preview/*.png,PG/Jules/*.gif,PG/Poz/*.gif,PG/Ruben/*.gif,icon.png
 
 version = 0.1
-version.string = beta 0.1
 
-icon.filename = %(source.dir)s/icon.png
-
-requirements = python3,kivy
+requirements = python3,kivy==2.3.0,sdl2_ttf==2.0.15
 
 orientation = landscape
+android.orientation = landscape
 
 fullscreen = 1
 
 android.permissions = INTERNET
-
 android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
+android.archs = arm64-v8a, armeabi-v7a
+
+# Icona app (se presente)
+# icon.filename = %(source.dir)s/icon.png
 
 [buildozer]
 log_level = 2
+warn_on_root = 1
