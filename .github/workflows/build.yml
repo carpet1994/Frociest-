@@ -13,7 +13,7 @@ jobs:
     steps:
 
       - name: Checkout codice
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Installa dipendenze di sistema
         run: |
@@ -42,7 +42,7 @@ jobs:
           pip3 install buildozer cython
 
       - name: Cache Android SDK/NDK e dipendenze Buildozer
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
@@ -56,7 +56,7 @@ jobs:
           buildozer -v android debug
 
       - name: Carica APK come artefatto scaricabile
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FrociestRumble-beta0.1
           path: bin/*.apk
