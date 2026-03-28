@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # permette di avviare manualmente dalla pagina GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -34,12 +34,14 @@ jobs:
             autoconf \
             libtool \
             pkg-config \
-            libltdl-dev
+            libltdl-dev \
+            cmake \
+            ninja-build
 
       - name: Installa Buildozer e Cython
         run: |
-          pip3 install --upgrade pip
-          pip3 install buildozer cython
+          pip3 install --upgrade pip setuptools
+          pip3 install buildozer cython virtualenv
 
       - name: Cache Android SDK/NDK e dipendenze Buildozer
         uses: actions/cache@v4
@@ -47,13 +49,26 @@ jobs:
           path: |
             ~/.buildozer
             ~/.android
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ hashFiles('buildozer.spec') }}-v2
           restore-keys: |
             buildozer-
 
+      - name: Debug - mostra struttura file
+        run: |
+          echo "=== Root del repository ==="
+          ls -la
+          echo "=== buildozer.spec ==="
+          cat buildozer.spec
+
       - name: Compila APK
         run: |
-          buildozer -v android debug
+          buildozer -v android debug 2>&1 | tee build.log
+          echo "Exit code: $?"
+
+      - name: Mostra log in caso di errore
+        if: failure()
+        run: |
+          tail -100 build.log || true
 
       - name: Carica APK come artefatto scaricabile
         uses: actions/upload-artifact@v4
@@ -61,3 +76,11 @@ jobs:
           name: FrociestRumble-beta0.1
           path: bin/*.apk
           retention-days: 30
+
+      - name: Carica log di build (anche in caso di errore)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
