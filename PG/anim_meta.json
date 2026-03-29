@@ -1,0 +1,68 @@
+{
+  "Jules_idle": {
+    "n_frames": 8,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Jules_walk": {
+    "n_frames": 6,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Jules_jump": {
+    "n_frames": 9,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "poz_idle": {
+    "n_frames": 8,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "poz_walk": {
+    "n_frames": 6,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "poz_jump": {
+    "n_frames": 9,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_idle": {
+    "n_frames": 4,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_walk": {
+    "n_frames": 6,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_jump": {
+    "n_frames": 9,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_punch": {
+    "n_frames": 3,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_kick": {
+    "n_frames": 7,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  }
+}
