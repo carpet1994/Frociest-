@@ -48,7 +48,7 @@ jobs:
           path: |
             ~/.buildozer
             ~/.android
-          key: buildozer-${{ hashFiles('buildozer.spec') }}-v25
+          key: buildozer-${{ hashFiles('buildozer.spec') }}-v30
           restore-keys: |
             buildozer-
 
@@ -63,7 +63,27 @@ jobs:
           echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
           echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > ~/.buildozer/android/platform/android-sdk/licenses/google-gdk-license
 
-      - name: Compila APK
+      - name: Prima fase build - costruisce hostpython (lascia fallire)
+        run: |
+          yes | buildozer -v android debug 2>&1 | tee build.log || true
+
+      - name: Inietta Cython nell'hostpython di p4a
+        run: |
+          # p4a compila un suo python (hostpython3) internamente.
+          # pygame 2.6.1 chiama "python setup.py build_ext" che cerca cython
+          # nell'hostpython - non nel python del sistema.
+          # Troviamo l'eseguibile hostpython e installiamo cython lì.
+          HOSTPY=$(find ~/.buildozer .buildozer -name "python3" \
+            -path "*/hostpython3/*/native-build/python3" 2>/dev/null | head -1)
+          echo "hostpython trovato: $HOSTPY"
+          if [ -n "$HOSTPY" ]; then
+            $HOSTPY -m pip install "cython==3.0.11"
+            echo "Cython installato in hostpython OK"
+          else
+            echo "ATTENZIONE: hostpython non trovato, la build potrebbe fallire"
+          fi
+
+      - name: Build finale APK
         run: |
           yes | buildozer -v android debug 2>&1 | tee build.log
           echo "Exit code: ${PIPESTATUS[1]}"
