@@ -12,6 +12,7 @@ try:
     import android                                      # type: ignore
     from android.runnable import run_on_ui_thread       # type: ignore
     from jnius import autoclass                         # type: ignore
+    import time
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
     ActivityInfo   = autoclass('android.content.pm.ActivityInfo')
     @run_on_ui_thread
@@ -19,6 +20,7 @@ try:
         PythonActivity.mActivity.setRequestedOrientation(
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
     _force_landscape()
+    time.sleep(0.35)   # attende che Android applichi la rotazione
     ON_ANDROID = True
 except Exception:
     ON_ANDROID = False
@@ -321,7 +323,10 @@ class Fighter:
 
     def _set_anim(self, state):
         if self.char['placeholder']: return
-        self.anim.set_gif(self.char.get(state, ''))
+        p = self.char.get(state, '')
+        if not p or not os.path.exists(p):
+            p = self.char.get('idle', '')
+        self.anim.set_gif(p)
 
     def _choose_anim(self, input_dir):
         if self.is_attacking:

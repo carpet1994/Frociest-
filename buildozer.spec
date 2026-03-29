@@ -14,6 +14,7 @@ requirements = python3,pygame,android,pyjnius,pillow
 
 orientation = landscape
 android.orientation = landscape
+android.manifest.screenOrientation = sensorLandscape
 
 fullscreen = 1
 
