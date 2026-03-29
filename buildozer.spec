@@ -6,11 +6,13 @@ package.domain = org.tappetovolante
 author = Tappeto Volante
 
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3
+source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
 version = 0.1
 
-requirements = python3,pygame,android,pyjnius,pillow
+# pillow rimosso: non ha recipe p4a, fallisce la cross-compilazione arm64.
+# Il codice gestisce già l'assenza con try/except ImportError nel load_gif().
+requirements = python3,pygame,android,pyjnius
 
 orientation = landscape
 android.orientation = landscape
@@ -27,9 +29,6 @@ android.ndk = 25b
 android.sdk = 34
 android.archs = arm64-v8a, armeabi-v7a
 
-# Forza p4a a usare un commit con la recipe pygame aggiornata
-# (fix per longintrepr.h rimosso in Python 3.11+)
-p4a.branch = develop
 
 [buildozer]
 log_level = 2

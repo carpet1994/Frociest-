@@ -81,38 +81,80 @@ def load_image(path, size=None):
     except Exception:
         return None
 
+# ── Sprite sheet metadata ─────────────────────────────────────────────────────
+import json as _json
+_SHEET_META: dict = {}
+
+def _load_sheet_meta():
+    global _SHEET_META
+    if _SHEET_META:
+        return
+    meta_path = _p('PG/anim_meta.json')
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, 'r') as _f:
+                _SHEET_META = _json.load(_f)
+        except Exception:
+            pass
+
 def load_gif(path):
     """
-    Load animated GIF -> list of (Surface, delay_ms).
-    Uses PIL/Pillow if available, otherwise single-frame fallback.
+    Carica animazione da sprite sheet PNG (_sheet.png) se disponibile,
+    altrimenti fallback su GIF via Pillow (desktop).
+    Ritorna list of (Surface, delay_ms).
     """
     if not path or not os.path.exists(path):
         return []
     key = ('gif', path)
     if key in _img_cache:
         return _img_cache[key]
+
+    _load_sheet_meta()
     frames = []
-    try:
-        from PIL import Image as PILImage          # type: ignore
-        pil = PILImage.open(path)
+
+    # Priorità: sprite sheet PNG (funziona su Android senza Pillow)
+    sheet_path = path.replace('.gif', '_sheet.png')
+    anim_name  = os.path.splitext(os.path.basename(path))[0]
+    meta       = _SHEET_META.get(anim_name)
+
+    if os.path.exists(sheet_path) and meta:
         try:
-            while True:
-                delay = pil.info.get('duration', 80)
-                frame = pil.convert('RGBA')
-                raw   = frame.tobytes()
-                surf  = pygame.image.frombytes(raw, frame.size, 'RGBA').convert_alpha()
-                frames.append((surf, max(delay, 40)))
-                pil.seek(pil.tell() + 1)
-        except EOFError:
-            pass
-    except ImportError:
-        try:
-            surf = pygame.image.load(path).convert_alpha()
-            frames = [(surf, 100)]
+            sheet = pygame.image.load(sheet_path).convert_alpha()
+            fw    = meta['frame_w']
+            fh    = meta['frame_h']
+            n     = meta['n_frames']
+            delay = meta['delay_ms']
+            for i in range(n):
+                frame = sheet.subsurface(pygame.Rect(i * fw, 0, fw, fh))
+                frames.append((frame, delay))
         except Exception:
-            pass
+            frames = []
+
+    # Fallback: GIF via Pillow (solo desktop) o frame singolo
+    if not frames:
+        try:
+            from PIL import Image as PILImage      # type: ignore
+            pil = PILImage.open(path)
+            try:
+                while True:
+                    delay = pil.info.get('duration', 80)
+                    frame = pil.convert('RGBA')
+                    raw   = frame.tobytes()
+                    surf  = pygame.image.frombytes(raw, frame.size, 'RGBA').convert_alpha()
+                    frames.append((surf, max(delay, 40)))
+                    pil.seek(pil.tell() + 1)
+            except EOFError:
+                pass
+        except ImportError:
+            try:
+                surf = pygame.image.load(path).convert_alpha()
+                frames = [(surf, 100)]
+            except Exception:
+                pass
+
     _img_cache[key] = frames
     return frames
+
 
 # ── GIF Animator ─────────────────────────────────────────────────────────────
 class GifAnim:
