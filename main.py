@@ -24,8 +24,9 @@ except Exception:
     ON_ANDROID = False
 
 import pygame
+pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
 pygame.init()
-pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+pygame.mixer.init()
 
 W, H = 1280, 720
 if ON_ANDROID:
@@ -36,6 +37,9 @@ else:
 pygame.display.set_caption("Frociest Rumble")
 clock = pygame.time.Clock()
 FPS   = 60
+
+# Recalculate after real dimensions are known
+GROUND_Y = H - 80
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 def _p(rel): return os.path.join(_BASE, rel)
@@ -289,7 +293,6 @@ def set_music(on):
 # ══════════════════════════════════════════════════════════════════════════════
 FIGHTER_W = 200
 FIGHTER_H = 350
-GROUND_Y  = H - 80   # y del suolo (coord pygame: y cresce verso il basso)
 
 class Fighter:
     SPEED      = 9
@@ -466,7 +469,12 @@ class RectButton:
 # ══════════════════════════════════════════════════════════════════════════════
 def _touch_pos(ev):
     if ev.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
-        return int(ev.x * W), int(ev.y * H)
+        # p4a (python-for-android) with pygame: coordinates are normalized 0..1
+        # but on some builds they may already be pixel coords — detect by range
+        x, y = ev.x, ev.y
+        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+            return int(x * W), int(y * H)
+        return int(x), int(y)
     return ev.pos
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -800,7 +808,7 @@ class GameScreen(Screen):
 
         elif ev.type in (pygame.FINGERMOTION, pygame.MOUSEMOTION):
             fid = getattr(ev, 'finger_id', 0)
-            x, y = (int(ev.x*W), int(ev.y*H)) if ev.type==pygame.FINGERMOTION else ev.pos
+            x, y = _touch_pos(ev)
             self._joystick.handle_move(x, y, fid)
 
         elif ev.type in (pygame.FINGERUP, pygame.MOUSEBUTTONUP):
