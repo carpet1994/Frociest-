@@ -35,21 +35,13 @@ jobs:
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
 
-      # Clona p4a al commit specifico che usa Python 3.11 e ha pygame fixato
-      - name: Clona python-for-android (commit fisso)
-        run: |
-          git clone https://github.com/kivy/python-for-android.git \
-            /home/runner/work/python-for-android
-          cd /home/runner/work/python-for-android
-          # Ultimo commit stabile prima dell'upgrade a Python 3.14
-          git checkout 5d4b096f7c59f08a993a983c21f81d3ffa5a6c3a
-
-      - name: Installa Buildozer e p4a locale
+      - name: Installa Buildozer e python-for-android
         run: |
           pip install --upgrade pip setuptools wheel
           pip install "cython==3.0.11"
           pip install "buildozer==1.5.0"
-          pip install -e /home/runner/work/python-for-android
+          # Tag 2023.09.16: ultima release stabile con Python 3.11 e recipe pygame fixata
+          pip install "python-for-android==2023.9.16"
 
       - name: Cache Android SDK/NDK
         uses: actions/cache@v4
@@ -57,7 +49,7 @@ jobs:
           path: |
             ~/.buildozer
             ~/.android
-          key: buildozer-${{ hashFiles('buildozer.spec') }}-v14
+          key: buildozer-${{ hashFiles('buildozer.spec') }}-v15
           restore-keys: |
             buildozer-
 
