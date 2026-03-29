@@ -1,8 +1,16 @@
 """
-Frociest Rumble — Pygame-CE port
-Sostituisce Kivy mantenendo identici tutti i percorsi degli asset.
-Richiede: pygame-ce  (pip install pygame-ce)
+Frociest Rumble — pygame / pygame_sdl2 compatible
+Android: buildozer con requirements=pygame_sdl2
+Desktop: pip install pygame
 """
+
+# pygame_sdl2 (usato da python-for-android) espone lo stesso namespace
+# di pygame standard — questo shim garantisce compatibilità su entrambi.
+try:
+    import pygame_sdl2          # type: ignore
+    pygame_sdl2.import_as_pygame()
+except ImportError:
+    pass  # desktop: usa pygame normale
 
 import os, sys, random, math
 os.environ.setdefault('SDL_AUDIODRIVER', 'openslES')   # Android audio
