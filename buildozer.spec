@@ -10,11 +10,12 @@ source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
 version = 0.1
 
-# pillow rimosso: non ha recipe p4a, fallisce la cross-compilazione arm64.
-# Il codice gestisce già l'assenza con try/except ImportError nel load_gif().
-# pygame viene incluso tramite la recipe p4a (develop branch) che usa pygame>=2.5
-# e non dipende più dal rimosso longintrepr.h (rimosso in Python 3.11.15+)
+# La recipe pygame custom in p4a_recipes/pygame/ forza pygame==2.6.1
+# che non usa più longintrepr.h (rimosso in Python 3.11.10+).
 requirements = python3,pygame,android,pyjnius
+
+# Punta alla cartella con la recipe pygame custom (relativa a source.dir)
+p4a.local_recipes = ./p4a_recipes
 
 orientation = landscape
 android.orientation = landscape
@@ -29,9 +30,6 @@ android.api = 34
 android.minapi = 21
 android.ndk = 25b
 android.sdk = 34
-
-# Compila solo arm64 per tenere i tempi di build bassi.
-# Aggiungere armeabi-v7a solo se serve supporto dispositivi molto vecchi.
 android.archs = arm64-v8a
 
 
