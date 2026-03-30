@@ -10,8 +10,9 @@ source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
 version = 0.1
 
-# ffpyplayer e' necessario per i GIF animati su Android (provider Kivy).
-requirements = python3,kivy,android,pyjnius,ffpyplayer
+# ffpyplayer RIMOSSO: non compila con Cython 3.
+# Le animazioni usano SheetAnimImage (sprite sheet PNG) definito in main.py.
+requirements = python3,kivy,android,pyjnius
 
 # Landscape: tutte e tre le righe sono necessarie insieme.
 orientation = landscape

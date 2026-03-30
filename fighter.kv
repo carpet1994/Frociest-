@@ -48,24 +48,13 @@
         size: 500, 500
         pos: 200, 50
 
-    # ── IMMAGINE PLAYER (separata, fuori dal Fighter) ──────────
-    Image:
+    # ── IMMAGINE PLAYER (SheetAnimImage - funziona su Android senza ffpyplayer)
+    SheetAnimImage:
         id: player_img
         source: player_id.current_source
         size: player_id.size
         pos: player_id.pos
-        anim_delay: 0.08
-        anim_loop: True
-        allow_stretch: True
-        keep_ratio: False
-        canvas.before:
-            PushMatrix
-            Scale:
-                x: player_id.scale_x
-                y: 1
-                origin: self.center
-        canvas.after:
-            PopMatrix
+        scale_x: player_id.scale_x
 
     Widget:
         id: hitbox_id
@@ -90,25 +79,14 @@
                 pos: self.pos
                 size: self.size
 
-    # ── IMMAGINE ENEMY (separata, fuori dal Fighter) ───────────
-    Image:
+    # ── IMMAGINE ENEMY (SheetAnimImage - funziona su Android senza ffpyplayer)
+    SheetAnimImage:
         id: enemy_img
         source: root.enemy_source if not root.enemy_is_placeholder else ''
         size: enemy_id.size
         pos: enemy_id.pos
-        anim_delay: 0.08
-        anim_loop: True
-        allow_stretch: True
-        keep_ratio: False
+        scale_x: enemy_id.scale_x
         opacity: 0 if root.enemy_is_placeholder else 1
-        canvas.before:
-            PushMatrix
-            Scale:
-                x: enemy_id.scale_x
-                y: 1
-                origin: self.center
-        canvas.after:
-            PopMatrix
 
     # ── BARRA HP GIOCATORE ─────────────────────────────────────
     Widget:

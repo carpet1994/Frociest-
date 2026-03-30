@@ -52,18 +52,145 @@ from kivy.core.audio import SoundLoader
 from kivy.vector import Vector
 from kivy.lang import Builder
 
-# FIX ANIMAZIONI GIF: forza ffpyplayer come provider per le immagini/video.
-# Senza questo, Kivy su Android usa il provider SDL2 che non supporta i GIF.
-from kivy.core.image import Image as CoreImage  # noqa - registra i provider
-try:
-    import ffpyplayer  # noqa - assicura che ffpyplayer sia importato
-except ImportError:
-    pass
+# Carica il modulo json per leggere anim_meta.json (sprite sheet metadata)
+import json as _json
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 
 def _p(rel):
     return os.path.join(_BASE, rel)
+
+# ── Carica metadati sprite sheet ──────────────────────────────────────────────
+_SHEET_META = {}
+
+def _load_sheet_meta():
+    global _SHEET_META
+    if _SHEET_META:
+        return
+    meta_path = _p('PG/anim_meta.json')
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, 'r') as f:
+                _SHEET_META = _json.load(f)
+        except Exception:
+            pass
+
+# ── Widget animazione sprite sheet ────────────────────────────────────────────
+# Usa PNG sheet invece di GIF: funziona su Android senza ffpyplayer.
+# Kivy legge i PNG nativamente su ogni piattaforma.
+from kivy.uix.widget import Widget as _W
+from kivy.graphics.texture import Texture
+from kivy.graphics import Rectangle, Color as GColor
+from kivy.core.image import Image as _CoreImg
+
+class SheetAnimImage(_W):
+    """
+    Mostra un'animazione da sprite sheet PNG.
+    Usa Clock per avanzare i frame; supporta flip orizzontale via scale_x.
+    """
+    source   = StringProperty('')
+    scale_x  = NumericProperty(1)  # 1 = normale, -1 = specchiato
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._frames   = []   # lista di Texture (una per frame)
+        self._idx      = 0
+        self._delay    = 0.1
+        self._event    = None
+        self._last_src = ''
+        self.bind(source=self._on_source, pos=self._redraw, size=self._redraw)
+
+    def _on_source(self, *_):
+        src = self.source
+        if src == self._last_src:
+            return
+        self._last_src = src
+        self._stop_anim()
+        self._frames = []
+        self._idx    = 0
+        if not src or not os.path.exists(src):
+            self.canvas.clear()
+            return
+        self._load_frames(src)
+        if self._frames:
+            self._start_anim()
+        self._redraw()
+
+    def _load_frames(self, gif_path):
+        _load_sheet_meta()
+        anim_name  = os.path.splitext(os.path.basename(gif_path))[0]
+        sheet_path = gif_path.replace('.gif', '_sheet.png')
+        meta       = _SHEET_META.get(anim_name)
+
+        if os.path.exists(sheet_path) and meta:
+            try:
+                img    = _CoreImg(sheet_path, keep_data=True)
+                tex    = img.texture
+                fw, fh = meta['frame_w'], meta['frame_h']
+                n      = meta['n_frames']
+                self._delay = meta['delay_ms'] / 1000.0
+                sheet_w = tex.width
+                sheet_h = tex.height
+                for i in range(n):
+                    # Coordinate UV in pixel (Kivy usa bottom-left origin)
+                    x = i * fw
+                    y = sheet_h - fh  # unica riga di frame
+                    sub = tex.get_region(x, y, fw, fh)
+                    self._frames.append(sub)
+                return
+            except Exception:
+                self._frames = []
+
+        # Fallback: immagine statica (primo frame)
+        try:
+            img = _CoreImg(gif_path)
+            self._frames = [img.texture]
+            self._delay  = 0.1
+        except Exception:
+            pass
+
+    def _start_anim(self):
+        if self._event:
+            self._event.cancel()
+        if len(self._frames) > 1:
+            self._event = Clock.schedule_interval(self._next_frame, self._delay)
+
+    def _stop_anim(self):
+        if self._event:
+            self._event.cancel()
+            self._event = None
+
+    def _next_frame(self, dt):
+        if not self._frames:
+            return
+        self._idx = (self._idx + 1) % len(self._frames)
+        self._redraw()
+
+    def _redraw(self, *_):
+        self.canvas.clear()
+        if not self._frames:
+            return
+        tex = self._frames[self._idx]
+        with self.canvas:
+            GColor(1, 1, 1, 1)
+            if self.scale_x < 0:
+                # Specchia orizzontalmente ribaltando le UV della texture
+                tex_flipped = tex  # Kivy non ha flip nativo su sub-texture,
+                # usiamo uvsize negativo
+                Rectangle(
+                    texture=tex,
+                    pos=(self.x + self.width, self.y),
+                    size=(-self.width, self.height)
+                )
+            else:
+                Rectangle(texture=tex, pos=self.pos, size=self.size)
+
+    def on_parent(self, *_):
+        # Riprendi animazione se reinserito nel widget tree
+        if self.parent and self._frames and not self._event:
+            self._start_anim()
+        elif not self.parent:
+            self._stop_anim()
 
 Builder.load_file(_p('menu.kv'))
 Builder.load_file(_p('fighter.kv'))
