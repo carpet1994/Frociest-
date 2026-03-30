@@ -1,294 +1,90 @@
-"""
-Frociest Rumble
-Android: buildozer con requirements=python3,pygame,android,pyjnius,pillow
-Desktop: pip install pygame
-"""
+import random
+import os
+import time
 
-import os, sys, random, math
+# ── Orientamento forzato su Android (PRIMA di Kivy) ──────────────────────────
+# Su Android il Config di Kivy viene ignorato: bisogna usare le API Java.
+from kivy.utils import platform
 
-# ── Android: forza landscape prima di init ────────────────────────────────────
-ON_ANDROID = False
-try:
-    import android                                      # type: ignore
-    from android.runnable import run_on_ui_thread       # type: ignore
-    from jnius import autoclass                         # type: ignore
-    import time
-
-    # FIX 1: prova entrambi i namespace (pygame-ce e kivy) per compatibilità
-    PythonActivity = None
-    for _ns in ('org.kivy.android.PythonActivity',
-                'org.beeware.android.MainActivity',
-                'org.pygame.android.PythonActivity'):
-        try:
-            PythonActivity = autoclass(_ns)
-            break
-        except Exception:
-            pass
-
-    ActivityInfo = autoclass('android.content.pm.ActivityInfo')
-
-    if PythonActivity is not None:
-        @run_on_ui_thread
-        def _force_landscape():
-            PythonActivity.mActivity.setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
-        _force_landscape()
-        time.sleep(0.35)   # attende che Android applichi la rotazione
-
-    ON_ANDROID = True
-except Exception:
-    ON_ANDROID = False
-
-# FIX 2: su Android 14+ openslES è deprecato, usare AAudio o lasciare SDL scegliere
-if ON_ANDROID:
-    # Non forzare openslES: SDL2 su Android 14/15 preferisce AAudio
-    os.environ.pop('SDL_AUDIODRIVER', None)
-
-import pygame
-
-# FIX 3: pre_init prima di pygame.init(), con buffer più grande per Android
-if ON_ANDROID:
-    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
-else:
-    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-
-pygame.init()
-
-# FIX 4: init mixer separato con fallback silenzioso se l'audio fallisce
-try:
-    pygame.mixer.init()
-except Exception:
-    pass  # il gioco gira anche senza audio, non crashare
-
-W, H = 1280, 720
-if ON_ANDROID:
-    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-    W, H   = screen.get_size()
-else:
-    screen = pygame.display.set_mode((W, H))
-pygame.display.set_caption("Frociest Rumble")
-clock = pygame.time.Clock()
-FPS   = 60
-
-# Recalculate after real dimensions are known
-GROUND_Y = H - 80
-
-_BASE = os.path.dirname(os.path.abspath(__file__))
-def _p(rel): return os.path.join(_BASE, rel)
-
-# ── Font helpers ──────────────────────────────────────────────────────────────
-_font_cache: dict = {}
-def font(size, bold=False):
-    key = (size, bold)
-    if key not in _font_cache:
-        _font_cache[key] = pygame.font.SysFont(None, size, bold=bold)
-    return _font_cache[key]
-
-def draw_text(surf, text, size, color, cx, cy, bold=False, alpha=255):
-    f   = font(size, bold)
-    img = f.render(text, True, color)
-    if alpha < 255:
-        img.set_alpha(alpha)
-    r = img.get_rect(center=(cx, cy))
-    surf.blit(img, r)
-
-# ── Image / GIF loader ────────────────────────────────────────────────────────
-_img_cache: dict = {}
-
-def load_image(path, size=None):
-    """Load PNG/JPG; returns Surface or None."""
-    if not path or not os.path.exists(path):
-        return None
-    key = (path, size)
-    if key in _img_cache:
-        return _img_cache[key]
+if platform == 'android':
     try:
-        img = pygame.image.load(path).convert_alpha()
-        if size:
-            img = pygame.transform.smoothscale(img, size)
-        _img_cache[key] = img
-        return img
-    except Exception:
-        return None
+        from android.runnable import run_on_ui_thread  # type: ignore
+        from jnius import autoclass                    # type: ignore
 
-# ── Sprite sheet metadata ─────────────────────────────────────────────────────
-import json as _json
-_SHEET_META: dict = {}
+        ActivityInfo = autoclass('android.content.pm.ActivityInfo')
 
-def _load_sheet_meta():
-    global _SHEET_META
-    if _SHEET_META:
-        return
-    meta_path = _p('PG/anim_meta.json')
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, 'r') as _f:
-                _SHEET_META = _json.load(_f)
-        except Exception:
-            pass
-
-def load_gif(path):
-    """
-    Carica animazione da sprite sheet PNG (_sheet.png) se disponibile,
-    altrimenti fallback su GIF via Pillow (desktop).
-    Ritorna list of (Surface, delay_ms).
-    """
-    if not path or not os.path.exists(path):
-        return []
-    key = ('gif', path)
-    if key in _img_cache:
-        return _img_cache[key]
-
-    _load_sheet_meta()
-    frames = []
-
-    # Priorità: sprite sheet PNG (funziona su Android senza Pillow)
-    sheet_path = path.replace('.gif', '_sheet.png')
-    anim_name  = os.path.splitext(os.path.basename(path))[0]
-    meta       = _SHEET_META.get(anim_name)
-
-    if os.path.exists(sheet_path) and meta:
-        try:
-            sheet = pygame.image.load(sheet_path).convert_alpha()
-            fw    = meta['frame_w']
-            fh    = meta['frame_h']
-            n     = meta['n_frames']
-            delay = meta['delay_ms']
-            for i in range(n):
-                frame = sheet.subsurface(pygame.Rect(i * fw, 0, fw, fh))
-                frames.append((frame, delay))
-        except Exception:
-            frames = []
-
-    # Fallback: GIF via Pillow (solo desktop) o frame singolo
-    if not frames:
-        try:
-            from PIL import Image as PILImage      # type: ignore
-            pil = PILImage.open(path)
+        # Prova tutti i namespace noti per PythonActivity
+        _PythonActivity = None
+        for _ns in ('org.kivy.android.PythonActivity',
+                    'org.pygame.android.PythonActivity',
+                    'org.beeware.android.MainActivity'):
             try:
-                while True:
-                    delay = pil.info.get('duration', 80)
-                    frame = pil.convert('RGBA')
-                    raw   = frame.tobytes()
-                    surf  = pygame.image.frombytes(raw, frame.size, 'RGBA').convert_alpha()
-                    frames.append((surf, max(delay, 40)))
-                    pil.seek(pil.tell() + 1)
-            except EOFError:
-                pass
-        except ImportError:
-            try:
-                surf = pygame.image.load(path).convert_alpha()
-                frames = [(surf, 100)]
+                _PythonActivity = autoclass(_ns)
+                break
             except Exception:
                 pass
 
-    _img_cache[key] = frames
-    return frames
+        if _PythonActivity is not None:
+            @run_on_ui_thread
+            def _force_landscape():
+                _PythonActivity.mActivity.setRequestedOrientation(
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+            _force_landscape()
+            time.sleep(0.4)  # lascia che Android applichi la rotazione
+    except Exception:
+        pass
+# ─────────────────────────────────────────────────────────────────────────────
 
+# ── Configurazione Kivy ───────────────────────────────────────────────────────
+from kivy.config import Config
+Config.set('graphics', 'orientation', 'landscape')
+Config.set('kivy', 'log_level', 'warning')
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ── GIF Animator ─────────────────────────────────────────────────────────────
-class GifAnim:
-    def __init__(self):
-        self.frames   = []
-        self.idx      = 0
-        self.elapsed  = 0
-        self._path    = ''
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
+from kivy.properties import (NumericProperty, ObjectProperty,
+                              BooleanProperty, ListProperty, StringProperty)
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.core.audio import SoundLoader
+from kivy.vector import Vector
+from kivy.lang import Builder
 
-    def set_gif(self, path):
-        if path == self._path:
-            return
-        self._path   = path
-        self.frames  = load_gif(path)
-        self.idx     = 0
-        self.elapsed = 0
+# FIX ANIMAZIONI GIF: forza ffpyplayer come provider per le immagini/video.
+# Senza questo, Kivy su Android usa il provider SDL2 che non supporta i GIF.
+from kivy.core.image import Image as CoreImage  # noqa - registra i provider
+try:
+    import ffpyplayer  # noqa - assicura che ffpyplayer sia importato
+except ImportError:
+    pass
 
-    def update(self, dt_ms):
-        if not self.frames:
-            return
-        self.elapsed += dt_ms
-        delay = self.frames[self.idx][1]
-        if self.elapsed >= delay:
-            self.elapsed -= delay
-            self.idx = (self.idx + 1) % len(self.frames)
+_BASE = os.path.dirname(os.path.abspath(__file__))
 
-    def get_frame(self):
-        if not self.frames:
-            return None
-        return self.frames[self.idx][0]
+def _p(rel):
+    return os.path.join(_BASE, rel)
 
-# ── Draw helpers ──────────────────────────────────────────────────────────────
-def draw_rect_rounded(surf, color, rect, radius=14, alpha=255):
-    if alpha < 255:
-        tmp = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
-        pygame.draw.rect(tmp, (*color, alpha), (0, 0, rect[2], rect[3]), border_radius=radius)
-        surf.blit(tmp, (rect[0], rect[1]))
-    else:
-        pygame.draw.rect(surf, color, rect, border_radius=radius)
+Builder.load_file(_p('menu.kv'))
+Builder.load_file(_p('fighter.kv'))
 
-def draw_ellipse_a(surf, color, rect, alpha=255):
-    if alpha < 255:
-        tmp = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
-        pygame.draw.ellipse(tmp, (*color[:3], alpha), (0, 0, rect[2], rect[3]))
-        surf.blit(tmp, (rect[0], rect[1]))
-    else:
-        pygame.draw.ellipse(surf, color, rect)
+ARENAS = [
+    {'name': 'Il CAF',      'preview': _p('Images/Arena/wallpaper.png'), 'bg': _p('Images/Arena/wallpaper.png')},
+    {'name': 'Frociest HQ', 'preview': _p('Images/Arena/HQ.png'),        'bg': _p('Images/Arena/HQ.png')},
+]
 
-def draw_image_centered(surf, img, cx, cy, flip_x=False, scale=1.0):
-    if img is None: return
-    s = img
-    if scale != 1.0:
-        nw = int(s.get_width()  * scale)
-        nh = int(s.get_height() * scale)
-        if nw < 1 or nh < 1: return
-        s  = pygame.transform.smoothscale(s, (nw, nh))
-    if flip_x:
-        s = pygame.transform.flip(s, True, False)
-    r = s.get_rect(center=(cx, cy))
-    surf.blit(s, r)
-
-def draw_image_fit(surf, img, rect, flip_x=False):
-    """Blit image scaled to fit rect, preserving aspect ratio."""
-    if img is None: return
-    iw, ih = img.get_size()
-    rw, rh = rect[2], rect[3]
-    if rw <= 0 or rh <= 0 or iw <= 0 or ih <= 0: return
-    scale = min(rw / iw, rh / ih)
-    nw, nh = max(1, int(iw * scale)), max(1, int(ih * scale))
-    s = pygame.transform.smoothscale(img, (nw, nh))
-    if flip_x:
-        s = pygame.transform.flip(s, True, False)
-    blit_x = rect[0] + (rw - nw) // 2
-    blit_y = rect[1] + (rh - nh) // 2
-    surf.blit(s, (blit_x, blit_y))
-
-# ── Sound ─────────────────────────────────────────────────────────────────────
-_snd_cache: dict = {}
-def load_sound(*paths):
-    for p in paths:
-        full = _p(p)
-        if not os.path.exists(full): continue
-        if full in _snd_cache: return _snd_cache[full]
-        try:
-            s = pygame.mixer.Sound(full)
-            _snd_cache[full] = s
-            return s
-        except Exception:
-            pass
-    return None
-
-# ── Game data ─────────────────────────────────────────────────────────────────
 def _char(name, folder, prefix, mirror, preview_name=None):
     pv = preview_name or f'{name}_preview'
     return {
-        'name':    name,
-        'preview': _p(f'PG/Preview/{pv}.png'),
-        'fullbody':_p(f'PG/Preview/{name}_fullbody.png'),
-        'idle':    _p(f'PG/{folder}/{prefix}_idle.gif'),
-        'walk':    _p(f'PG/{folder}/{prefix}_walk.gif'),
-        'jump':    _p(f'PG/{folder}/{prefix}_jump.gif'),
-        'punch':   _p(f'PG/{folder}/{prefix}_punch.gif'),
-        'kick':    _p(f'PG/{folder}/{prefix}_kick.gif'),
-        'mirror':  mirror,
+        'name':        name,
+        'preview':     _p(f'PG/Preview/{pv}.png'),
+        'fullbody':    _p(f'PG/Preview/{name}_fullbody.png'),
+        'idle':        _p(f'PG/{folder}/{prefix}_idle.gif'),
+        'walk':        _p(f'PG/{folder}/{prefix}_walk.gif'),
+        'jump':        _p(f'PG/{folder}/{prefix}_jump.gif'),
+        'punch':       _p(f'PG/{folder}/{prefix}_punch.gif'),
+        'kick':        _p(f'PG/{folder}/{prefix}_kick.gif'),
+        'mirror':      mirror,
         'placeholder': False,
         'placeholder_color': None,
     }
@@ -299,819 +95,596 @@ def _ph(color):
             'punch':'','kick':'','mirror':False}
 
 CHARACTERS = [
-    _char('Jules','Jules','Jules', False, preview_name='Giuse_preview'),
-    _char('Poz',  'Poz',  'poz',   True),
-    _char('Ruben','Ruben','Ruben', False),
-    _ph([230,178,25]), _ph([204,76,229]),
-    _ph([25,204,204]), _ph([242,127,25]),
-    _ph([127,127,127]),
-]
-
-ARENAS = [
-    {'name':'Il CAF',      'preview':_p('Images/Arena/wallpaper.png'), 'bg':_p('Images/Arena/wallpaper.png')},
-    {'name':'Frociest HQ', 'preview':_p('Images/Arena/HQ.png'),       'bg':_p('Images/Arena/HQ.png')},
+    _char('Jules', 'Jules', 'Jules', False, preview_name='Giuse_preview'),
+    _char('Poz',   'Poz',   'poz',   True),
+    _char('Ruben', 'Ruben', 'Ruben', False),
+    _ph([0.9, 0.7, 0.1, 1]), _ph([0.8, 0.3, 0.9, 1]),
+    _ph([0.1, 0.8, 0.8, 1]), _ph([0.95,0.5, 0.1, 1]),
+    _ph([0.5, 0.5, 0.5, 1]),
 ]
 
 GAME_SETTINGS = {'music_on': True, 'timer': 90, 'rounds': 3}
+
 
 def pick_enemy(player_index):
     choices = [i for i in range(len(CHARACTERS))
                if i != player_index and not CHARACTERS[i]['placeholder']]
     return random.choice(choices)
 
-# ── Music ─────────────────────────────────────────────────────────────────────
-_music_playing  = None
-_combat_channel = None
-_combat_snd     = None
 
-def start_menu_music():
-    global _music_playing, _combat_channel
-    if _combat_channel:
-        _combat_channel.stop(); _combat_channel = None
-    if not GAME_SETTINGS['music_on']:
-        pygame.mixer.music.stop(); _music_playing = None; return
-    if _music_playing == 'menu': return
-    for p in ('Audio/jingle.ogg','Audio/jingle.mp3'):
-        full = _p(p)
-        if os.path.exists(full):
-            try:
-                pygame.mixer.music.load(full)
-                pygame.mixer.music.set_volume(0.7)
-                pygame.mixer.music.play(-1)
-                _music_playing = 'menu'
-                return
-            except Exception: pass
+class RoundButton(Widget):
+    text      = StringProperty('')
+    font_size = NumericProperty(24)
+    btn_color = ListProperty([1, 1, 1, 0.3])
 
-def start_combat_music():
-    global _music_playing, _combat_channel, _combat_snd
-    pygame.mixer.music.stop(); _music_playing = None
-    if _combat_snd is None:
-        _combat_snd = load_sound('Audio/combat.ogg','Audio/combat.mp3')
-    if _combat_snd:
-        _combat_channel = _combat_snd.play(-1)
 
-def stop_combat_music():
-    global _combat_channel
-    if _combat_channel:
-        _combat_channel.stop(); _combat_channel = None
+class Joystick(Widget):
+    knob_pos       = ListProperty([0, 0])
+    background_pos = ListProperty([0, 0])
+    active         = BooleanProperty(False)
+    dir_x          = NumericProperty(0)
 
-def set_music(on):
-    GAME_SETTINGS['music_on'] = on
-    if on:
-        if _music_playing != 'menu': start_menu_music()
-    else:
-        pygame.mixer.music.stop()
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Fighter
-# ══════════════════════════════════════════════════════════════════════════════
-FIGHTER_W = 200
-FIGHTER_H = 350
-
-class Fighter:
-    SPEED      = 9
-    JUMP_FORCE = -22
-    GRAVITY    = 1.1
-
-    def __init__(self, x, facing_left, char):
-        self.x            = float(x)
-        self.y            = float(GROUND_Y)
-        self.vel_x        = 0.0
-        self.vel_y        = 0.0
-        self.hp           = 250
-        self.is_crouching = False
-        self.is_attacking = False
-        self.attack_type  = None
-        self.facing_left  = facing_left
-        self.mirror_default = char['mirror']
-        self.char         = char
-        self.anim         = GifAnim()
-        self._h           = FIGHTER_H
-        self._atk_timer   = 0.0
-        self._set_anim('idle')
-
-    @property
-    def center_x(self): return self.x + FIGHTER_W / 2
-
-    def _set_anim(self, state):
-        if self.char['placeholder']: return
-        p = self.char.get(state, '')
-        if not p or not os.path.exists(p):
-            p = self.char.get('idle', '')
-        self.anim.set_gif(p)
-
-    def _choose_anim(self, input_dir):
-        if self.is_attacking:
-            return 'punch' if self.attack_type == 'punch' else 'kick'
-        if self.y < GROUND_Y - 2: return 'jump'
-        if self.is_crouching:     return 'idle'
-        return 'walk' if input_dir != 0 else 'idle'
-
-    def jump(self):
-        if self.y >= GROUND_Y - 2:
-            self.vel_y = self.JUMP_FORCE
-
-    def start_attack(self, atype):
-        if not self.is_attacking:
-            self.is_attacking = True
-            self.attack_type  = atype
-            self._atk_timer   = 0.35
-
-    def crouch(self, val):
-        self.is_crouching = val
-        self._h = int(FIGHTER_H * 0.55) if val else FIGHTER_H
-
-    def update(self, dt, input_dir, opponent_x=None):
-        if input_dir > 0:   self.facing_left = False
-        elif input_dir < 0: self.facing_left = True
-        elif opponent_x is not None:
-            self.facing_left = opponent_x < self.center_x
-
-        self._set_anim(self._choose_anim(input_dir))
-        self.anim.update(dt * 1000)
-
-        if self.is_attacking:
-            self._atk_timer -= dt
-            if self._atk_timer <= 0:
-                self.is_attacking = False
-                self.attack_type  = None
-
-        on_ground = self.y >= GROUND_Y - 2
-        if on_ground:
-            self.vel_x = 0 if self.is_crouching else input_dir * self.SPEED
-        else:
-            self.vel_x = self.vel_x * 0.9 + input_dir * 1.5
-
-        self.x += self.vel_x
-        self.y += self.vel_y
-        if not on_ground:
-            self.vel_y += self.GRAVITY
-        if self.y >= GROUND_Y:
-            self.y = GROUND_Y; self.vel_y = 0
-
-    def draw(self, surf):
-        dw, dh = FIGHTER_W, self._h
-        flip = (not self.facing_left) if self.mirror_default else self.facing_left
-
-        if self.char['placeholder']:
-            c = self.char['placeholder_color'][:3]
-            pygame.draw.rect(surf, c, (int(self.x), int(self.y) - dh, dw, dh))
-        else:
-            frame = self.anim.get_frame()
-            if frame:
-                scaled = pygame.transform.smoothscale(frame, (dw, dh))
-                if flip:
-                    scaled = pygame.transform.flip(scaled, True, False)
-                surf.blit(scaled, (int(self.x), int(self.y) - dh))
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Virtual Joystick
-# ══════════════════════════════════════════════════════════════════════════════
-class VirtualJoystick:
-    RADIUS = 90
-    KNOB_R = 36
-
-    def __init__(self):
-        self.active  = False
-        self.cx = self.cy = 0
-        self.kx = self.ky = 0
-        self.dir_x   = 0
-        self._finger = None
-
-    def handle_down(self, x, y, fid):
-        if x < W // 2:
-            self.active = True
-            self.cx, self.cy = x, y
-            self.kx, self.ky = x, y
-            self._finger = fid
-            self.dir_x   = 0
+    def on_touch_down(self, touch):
+        if touch.x < Window.width / 2:
+            self.active         = True
+            self.background_pos = [touch.x - 100, touch.y - 100]
+            self.knob_pos       = list(touch.pos)
+            touch.ud['joystick'] = True
             return True
         return False
 
-    def handle_move(self, x, y, fid):
-        if not self.active or fid != self._finger: return
-        dx = x - self.cx; dy = y - self.cy
-        dist = math.hypot(dx, dy)
-        if dist > self.RADIUS:
-            dx *= self.RADIUS / dist
-            dy *= self.RADIUS / dist
-        self.kx = self.cx + dx
-        self.ky = self.cy + dy
-        self.dir_x = 1 if dx > 25 else (-1 if dx < -25 else 0)
+    def on_touch_move(self, touch):
+        if touch.ud.get('joystick') and self.active:
+            center   = Vector(self.background_pos) + Vector(100, 100)
+            diff     = Vector(touch.pos) - center
+            dist     = min(diff.length(), 100)
+            direction = diff.normalize() if diff.length() > 0 else Vector(0, 0)
+            self.knob_pos = list(center + direction * dist)
+            self.dir_x = (1 if diff.x > 30 else -1 if diff.x < -30 else 0)
+            return True
 
-    def handle_up(self, fid):
-        if fid == self._finger:
-            self.active  = False
-            self.dir_x   = 0
-            self._finger = None
+    def on_touch_up(self, touch):
+        if touch.ud.get('joystick') and self.active:
+            self.active = False
+            self.dir_x  = 0
+            return True
 
-    def draw(self, surf):
-        if not self.active: return
-        s = pygame.Surface((self.RADIUS*2+2, self.RADIUS*2+2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (255,255,255,60), (self.RADIUS+1, self.RADIUS+1), self.RADIUS, 3)
-        surf.blit(s, (int(self.cx)-self.RADIUS-1, int(self.cy)-self.RADIUS-1))
-        pygame.draw.circle(surf, (255,255,255), (int(self.kx), int(self.ky)), self.KNOB_R)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Buttons
-# ══════════════════════════════════════════════════════════════════════════════
-class CircleButton:
-    def __init__(self, cx, cy, r, label, color):
-        self.cx = cx; self.cy = cy; self.r = r
-        self.label = label; self.color = color
+class Fighter(Widget):
+    hp             = NumericProperty(250)
+    vel_x          = NumericProperty(0)
+    vel_y          = NumericProperty(0)
+    is_crouching   = BooleanProperty(False)
+    is_attacking   = BooleanProperty(False)
+    attack_type    = ObjectProperty(None, allownone=True)
+    current_source = StringProperty('')
+    facing_left    = BooleanProperty(False)
+    mirror_default = BooleanProperty(False)
+    scale_x        = NumericProperty(1)
+    anim_idle      = StringProperty('')
+    anim_walk      = StringProperty('')
+    anim_jump      = StringProperty('')
+    anim_punch     = StringProperty('')
+    anim_kick      = StringProperty('')
 
-    def hit(self, x, y): return math.hypot(x-self.cx, y-self.cy) <= self.r
+    speed = 12; jump_force = 32; gravity = 1.6; ground_y = 50
 
-    def draw(self, surf):
-        s = pygame.Surface((self.r*2, self.r*2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (*self.color, 140), (self.r, self.r), self.r)
-        surf.blit(s, (self.cx-self.r, self.cy-self.r))
-        draw_text(surf, self.label, 32, (255,255,255), self.cx, self.cy, bold=True)
+    def _update_scale(self, *_):
+        self.scale_x = (-1 if self.facing_left else 1) if not self.mirror_default \
+                  else (-1 if not self.facing_left else 1)
 
-class RectButton:
-    def __init__(self, x, y, w, h, label, color, font_size=36, radius=18):
-        self.rect   = pygame.Rect(x, y, w, h)
-        self.label  = label; self.color = color
-        self.fs     = font_size; self.radius = radius
+    def on_facing_left(self, *_):    self._update_scale()
+    def on_mirror_default(self, *_): self._update_scale()
 
-    def hit(self, x, y): return self.rect.collidepoint(x, y)
+    def jump(self):
+        if self.y <= self.ground_y:
+            self.vel_y = self.jump_force
 
-    def draw(self, surf, alpha=220):
-        draw_rect_rounded(surf, self.color, self.rect, self.radius, alpha)
-        draw_text(surf, self.label, self.fs, (255,255,255),
-                  self.rect.centerx, self.rect.centery, bold=True)
+    def apply_physics(self, input_dir, opponent_x=None):
+        if self.is_attacking:
+            new_src = self.anim_punch if self.attack_type == 'punch' else self.anim_kick
+        elif self.y > self.ground_y:
+            new_src = self.anim_jump
+        elif self.is_crouching:
+            new_src = self.anim_idle
+        else:
+            new_src = self.anim_walk if input_dir != 0 else self.anim_idle
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Touch helper
-# ══════════════════════════════════════════════════════════════════════════════
-def _touch_pos(ev):
-    if ev.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
-        # p4a (python-for-android) with pygame: coordinates are normalized 0..1
-        # but on some builds they may already be pixel coords — detect by range
-        x, y = ev.x, ev.y
-        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
-            return int(x * W), int(y * H)
-        return int(x), int(y)
-    return ev.pos
+        if input_dir > 0:       self.facing_left = False
+        elif input_dir < 0:     self.facing_left = True
+        elif opponent_x is not None:
+            self.facing_left = opponent_x < self.center_x
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Base Screen
-# ══════════════════════════════════════════════════════════════════════════════
-class Screen:
-    def on_enter(self): pass
-    def on_leave(self): pass
-    def handle_event(self, event): pass
-    def update(self, dt): pass
-    def draw(self, surf): pass
+        if self.current_source != new_src:
+            self.current_source = new_src
 
-# ── Splash ────────────────────────────────────────────────────────────────────
-class SplashScreen(Screen):
-    def on_enter(self):
-        self._timer = 5.0
-        self._logo  = load_image(_p('Images/dev.png'))
+        if self.y <= self.ground_y:
+            self.vel_x = 0 if self.is_crouching else input_dir * self.speed
+        else:
+            self.vel_x = self.vel_x * 0.9 + input_dir * 2
 
-    def update(self, dt):
-        self._timer -= dt
-        if self._timer <= 0:
-            start_menu_music()
-            return 'menu'
+        self.x += self.vel_x
+        self.y += self.vel_y
+        if self.y > self.ground_y:
+            self.vel_y -= self.gravity
+        else:
+            self.y = self.ground_y; self.vel_y = 0
 
-    def draw(self, surf):
-        surf.fill((0,0,0))
-        draw_text(surf, "Developed by", 32, (255,255,255), W//2, H//2 - int(H*0.22), bold=True)
-        if self._logo:
-            size = int(H * 0.55)
-            sc = size / self._logo.get_height()
-            draw_image_centered(surf, self._logo, W//2, H//2, scale=sc)
 
-# ── Menu ──────────────────────────────────────────────────────────────────────
-class MenuScreen(Screen):
-    def on_enter(self):
-        bw, bh = 320, 90
-        cx = W // 2
-        self._logo = load_image(_p('Images/game_logo.png'))
-        self._btns = [
-            RectButton(cx-bw//2, int(H*0.40), bw, bh, "START",   (25,204,76)),
-            RectButton(cx-bw//2, int(H*0.24), bw, bh, "OPTIONS", (25,102,229)),
-            RectButton(cx-bw//2, int(H*0.08), bw, bh, "QUIT",    (191,25,25)),
-        ]
+class FighterGame(Widget):
+    player   = ObjectProperty(None)
+    enemy    = ObjectProperty(None)
+    joystick = ObjectProperty(None)
+    hitbox   = ObjectProperty(None)
 
-    def handle_event(self, ev):
-        if ev.type not in (pygame.FINGERDOWN, pygame.MOUSEBUTTONDOWN): return
-        x, y = _touch_pos(ev)
-        if self._btns[0].hit(x,y): return 'charselect'
-        if self._btns[1].hit(x,y): return 'options'
-        if self._btns[2].hit(x,y): return 'quit'
+    timer_text      = StringProperty('90')
+    bg_source       = StringProperty('')
+    countdown_image = StringProperty('')
+    winner_image    = StringProperty('')
+    player_wins     = NumericProperty(0)
+    enemy_wins      = NumericProperty(0)
+    wins_needed     = NumericProperty(2)
+    max_dots        = NumericProperty(2)
+    selected_char   = NumericProperty(0)
+    enemy_char      = NumericProperty(0)
 
-    def draw(self, surf):
-        surf.fill((38,38,38))
-        if self._logo:
-            lh = int(H * 0.42)
-            lw = int(lh * self._logo.get_width() / self._logo.get_height())
-            lw = min(lw, int(W * 0.75))
-            img = pygame.transform.smoothscale(self._logo, (lw, lh))
-            surf.blit(img, (W//2 - lw//2, int(H*0.55)))
-        for b in self._btns: b.draw(surf)
+    enemy_is_placeholder    = BooleanProperty(True)
+    enemy_placeholder_color = ListProperty([0.5, 0.5, 0.5, 1])
+    enemy_source            = StringProperty('')
+    enemy_punch_source      = StringProperty('')
+    enemy_kick_source       = StringProperty('')
+    paused   = BooleanProperty(False)
+    player_x = NumericProperty(200)
+    enemy_x  = NumericProperty(600)
 
-# ── Options ───────────────────────────────────────────────────────────────────
-class OptionsScreen(Screen):
-    def on_enter(self):
-        self._music_on = GAME_SETTINGS['music_on']
-        self._timer    = GAME_SETTINGS['timer']
-        self._rounds   = GAME_SETTINGS['rounds']
-        self._confirm  = False
-        self._build()
+    _time_left = 90.0; _round_duration = 90
+    _round_active = False; _round_ending = False
+    _player_name = ''; _enemy_name = ''
+    _enemy_idle_source = ''
 
-    def _build(self):
-        hw = (W - 60) // 2
-        self._btn_on  = RectButton(30,      int(H*0.71), hw, 72, "ON",  (60,60,70), 30)
-        self._btn_off = RectButton(30+hw+6, int(H*0.71), hw, 72, "OFF", (60,60,70), 30)
-        tw = (W - 58) // 4
-        self._btn_t = [(v, RectButton(30+i*(tw+6), int(H*0.54), tw, 72, str(v), (60,60,70), 28))
-                       for i,v in enumerate((10,60,90,120))]
-        rw = (W - 52) // 2
-        self._btn_r = [(v, RectButton(30+i*(rw+6), int(H*0.37), rw, 72, str(v), (60,60,70), 28))
-                       for i,v in enumerate((3,5))]
-        self._btn_save = RectButton(30,    int(H*0.12), 280, 80, "SAVE",   (25,178,51))
-        self._btn_back = RectButton(W-220, int(H*0.12), 180, 60, "< BACK", (76,76,76), 26)
-        self._btn_cs   = RectButton(W//2-170, H//2+10, 160, 70, "SAVE",    (25,178,51))
-        self._btn_cd   = RectButton(W//2+10,  H//2+10, 160, 70, "DISCARD", (191,25,25))
+    def on_kv_post(self, base_widget):
+        p = self.ids.player_id; e = self.ids.enemy_id
+        p.bind(x=lambda i,v: setattr(self,'player_x',v))
+        e.bind(x=lambda i,v: setattr(self,'enemy_x',v))
+        e.bind(is_attacking=self._update_enemy_source,
+               attack_type=self._update_enemy_source,
+               current_source=lambda i,v: setattr(self,'enemy_source',v) if not i.is_attacking else None)
+        self.player_x = p.x; self.enemy_x = e.x
+        self.ids.btn_jump.bind(on_touch_down=self._btn_up_down)
+        self.ids.btn_punch.bind(on_touch_down=self._btn_a_down)
+        self.ids.btn_kick.bind(on_touch_down=self._btn_b_down)
+        self.ids.btn_crouch.bind(on_touch_down=self._btn_down_down, on_touch_up=self._btn_down_up)
+        self.ids.btn_pause.bind(on_touch_down=self._btn_pause_down)
+        self.ids.btn_resume.bind(on_touch_down=self._btn_resume_down)
+        self.ids.btn_pause_menu.bind(on_touch_down=self._btn_pause_menu_down)
+        self.ids.btn_pause_quit.bind(on_touch_down=self._btn_pause_quit_down)
 
-    def handle_event(self, ev):
-        if ev.type not in (pygame.FINGERDOWN, pygame.MOUSEBUTTONDOWN): return
-        x, y = _touch_pos(ev)
-        if self._confirm:
-            if self._btn_cs.hit(x,y): self._apply(); return 'menu'
-            if self._btn_cd.hit(x,y): self._confirm = False
-            return
-        if self._btn_on.hit(x,y):  self._music_on = True
-        if self._btn_off.hit(x,y): self._music_on = False
-        for v,b in self._btn_t:
-            if b.hit(x,y): self._timer = v
-        for v,b in self._btn_r:
-            if b.hit(x,y): self._rounds = v
-        if self._btn_save.hit(x,y): self._apply(); return 'menu'
-        if self._btn_back.hit(x,y):
-            changed = (self._music_on != GAME_SETTINGS['music_on'] or
-                       self._timer   != GAME_SETTINGS['timer'] or
-                       self._rounds  != GAME_SETTINGS['rounds'])
-            if changed: self._confirm = True
-            else: return 'menu'
+    def _setup_player(self):
+        char = CHARACTERS[self.selected_char]; p = self.ids.player_id
+        p.anim_idle=char['idle']; p.anim_walk=char['walk']
+        p.anim_jump=char['jump']; p.anim_punch=char['punch']
+        p.anim_kick=char['kick']; p.current_source=char['idle']
+        p.mirror_default=char['mirror']; p.facing_left=False
+        self._player_name=char['name']
 
-    def _apply(self):
-        GAME_SETTINGS['music_on'] = self._music_on
-        GAME_SETTINGS['timer']    = self._timer
-        GAME_SETTINGS['rounds']   = self._rounds
-        self._confirm = False
-        set_music(self._music_on)
+    def _setup_enemy(self):
+        char = CHARACTERS[self.enemy_char]; e = self.ids.enemy_id
+        if char['placeholder']:
+            self.enemy_is_placeholder=True
+            self.enemy_placeholder_color=char['placeholder_color']
+            self.enemy_source=self.enemy_punch_source=self.enemy_kick_source=''
+            self._enemy_idle_source=''
+            e.anim_idle=e.anim_walk=e.anim_jump=e.anim_punch=e.anim_kick=''
+        else:
+            self.enemy_is_placeholder=False
+            self.enemy_source=char['idle']
+            self.enemy_punch_source=char['punch']
+            self.enemy_kick_source=char['kick']
+            self._enemy_idle_source=char['idle']
+            e.anim_idle=char['idle']; e.anim_walk=char['walk']
+            e.anim_jump=char['jump']; e.anim_punch=char['punch']
+            e.anim_kick=char['kick']; e.current_source=char['idle']
+            e.mirror_default=char['mirror']; e.facing_left=True
+        self._enemy_name=char['name']
+        self._round_duration=GAME_SETTINGS['timer']
+        self._time_left=float(self._round_duration)
+        self.timer_text=str(self._round_duration)
+        rounds=GAME_SETTINGS['rounds']
+        self.wins_needed=(rounds//2)+1; self.max_dots=self.wins_needed
 
-    def draw(self, surf):
-        surf.fill((25,25,25))
-        draw_text(surf, "OPTIONS", 54, (255,255,255), W//2, int(H*0.90), bold=True)
-        draw_text(surf, "Music",            32, (153,153,153), 120, int(H*0.79)+18, bold=True)
-        self._btn_on.draw(surf, 220);  self._btn_off.draw(surf, 220)
-        pygame.draw.rect(surf, (255,204,25) if self._music_on     else (80,80,80), self._btn_on.rect,  3, border_radius=10)
-        pygame.draw.rect(surf, (255,204,25) if not self._music_on else (80,80,80), self._btn_off.rect, 3, border_radius=10)
-        draw_text(surf, "Timer (seconds)", 32, (153,153,153), 200, int(H*0.62)+18, bold=True)
-        for v,b in self._btn_t:
-            b.draw(surf, 220)
-            if v == self._timer: pygame.draw.rect(surf, (255,204,25), b.rect, 3, border_radius=10)
-        draw_text(surf, "Rounds",          32, (153,153,153), 120, int(H*0.45)+18, bold=True)
-        for v,b in self._btn_r:
-            b.draw(surf, 220)
-            if v == self._rounds: pygame.draw.rect(surf, (255,204,25), b.rect, 3, border_radius=10)
-        self._btn_save.draw(surf); self._btn_back.draw(surf)
-        if self._confirm:
-            ov = pygame.Surface((W,H), pygame.SRCALPHA); ov.fill((0,0,0,170)); surf.blit(ov,(0,0))
-            draw_text(surf, "Save changes?", 44, (255,255,255), W//2, H//2-30, bold=True)
-            self._btn_cs.draw(surf); self._btn_cd.draw(surf)
-
-# ── Char Select ───────────────────────────────────────────────────────────────
-class CharSelectScreen(Screen):
-    CS = 130   # char thumbnail size
-
-    def on_enter(self):
-        self._selected   = 0
-        self._confirmed  = False
-        self._enemy_idx  = -1
-        self._roulette   = False
-        self._rou_step   = 0
-        self._rou_target = 0
-        self._rou_timer  = 0.0
-        self._go_timer   = -1.0
-        self._enemy_border_idx = -1
-        # Grid
-        cols = 4; cs = self.CS; gap = 20
-        gw = cols*cs + (cols-1)*gap
-        ox = W//2 - gw//2; oy = int(H*0.52)
-        self._char_rects = []
-        for i in range(len(CHARACTERS)):
-            r = i // cols; c = i % cols
-            self._char_rects.append(pygame.Rect(ox+c*(cs+gap), oy+r*(cs+gap), cs, cs))
-        self._prev_imgs = [
-            None if CHARACTERS[i]['placeholder'] else load_image(CHARACTERS[i]['preview'], (cs, cs))
-            for i in range(len(CHARACTERS))
-        ]
-        self._fullbody = [
-            None if CHARACTERS[i]['placeholder'] else load_image(CHARACTERS[i]['fullbody'])
-            for i in range(len(CHARACTERS))
-        ]
-        self._btn_fight = RectButton(W-310, int(H*0.02), 280, 80, "NEXT >",  (217,25,25))
-        self._btn_back  = RectButton(20,    int(H*0.93), 180, 60, "< BACK",  (76,76,76), 26)
-
-    def handle_event(self, ev):
-        if ev.type not in (pygame.FINGERDOWN, pygame.MOUSEBUTTONDOWN): return
-        x, y = _touch_pos(ev)
-        if self._confirmed: return
-        if self._btn_back.hit(x,y):  return 'menu'
-        if self._btn_fight.hit(x,y): self._start_confirm(); return
-        for i, r in enumerate(self._char_rects):
-            if r.collidepoint(x,y): self._selected = i; break
-
-    def _start_confirm(self):
-        self._confirmed  = True
-        self._roulette   = True
-        self._rou_step   = 0
-        self._rou_target = pick_enemy(self._selected)
-        self._rou_timer  = 0.0
-
-    def update(self, dt):
-        if self._roulette:
-            self._rou_timer += dt
-            self._rou_step = int(self._rou_timer * 12) % len(CHARACTERS)
-            if self._rou_timer >= 1.5:
-                self._roulette         = False
-                self._enemy_idx        = self._rou_target
-                self._enemy_border_idx = self._rou_target
-                self._go_timer         = 0.5
-        if self._go_timer >= 0:
-            self._go_timer -= dt
-            if self._go_timer < 0:
-                return ('arenaselect', self._selected, self._enemy_idx)
-
-    def draw(self, surf):
-        surf.fill((25,25,25))
-        draw_text(surf, "SELECT CHARACTER", 44, (255,255,255), W//2, int(H*0.88), bold=True)
-        fb_w = int(W*0.28); fb_h = int(H*0.65)
-        if self._fullbody[self._selected]:
-            draw_image_fit(surf, self._fullbody[self._selected], (0, int(H*0.02), fb_w, fb_h))
-        ei = self._rou_step if self._roulette else self._enemy_idx
-        if ei >= 0 and not CHARACTERS[ei]['placeholder'] and self._fullbody[ei]:
-            draw_image_fit(surf, self._fullbody[ei], (W-fb_w, int(H*0.02), fb_w, fb_h), flip_x=True)
-        for i, r in enumerate(self._char_rects):
-            c = CHARACTERS[i]
-            if c['placeholder']:
-                col = c['placeholder_color'][:3]
-                pygame.draw.rect(surf, col, r, border_radius=12)
-            else:
-                img = self._prev_imgs[i]
-                if img: surf.blit(img, r)
-                else:   pygame.draw.rect(surf, (80,80,80), r, border_radius=12)
-            if i == self._selected:
-                pygame.draw.rect(surf, (255,255,255), r.inflate(8,8), 3, border_radius=16)
-            ri = self._rou_step if self._roulette else self._enemy_border_idx
-            if ri == i:
-                pygame.draw.rect(surf, (255,25,25), r.inflate(8,8), 3, border_radius=16)
-        cname = CHARACTERS[self._selected]['name'] if not CHARACTERS[self._selected]['placeholder'] else '???'
-        draw_text(surf, cname, 38, (255,255,0), W//2, int(H*0.44), bold=True)
-        vs = load_image(_p('Images/vs.png'))
-        if vs:
-            sc = min(440/vs.get_width(), 220/vs.get_height())
-            draw_image_centered(surf, vs, W//2, int(H*0.32), scale=sc)
-        self._btn_fight.draw(surf); self._btn_back.draw(surf)
-
-# ── Arena Select ──────────────────────────────────────────────────────────────
-class ArenaSelectScreen(Screen):
-    def __init__(self):
-        self._selected_char = 0
-        self._enemy_char    = 0
-        self._selected      = 0
-
-    def on_enter(self):
-        self._selected = 0
-        aw, ah = int(W*0.35), int(H*0.50)
-        gap = 40; total = len(ARENAS)*aw + (len(ARENAS)-1)*gap
-        ox = W//2 - total//2
-        self._arena_rects = [pygame.Rect(ox+i*(aw+gap), int(H*0.35), aw, ah) for i in range(len(ARENAS))]
-        self._prev_imgs   = [load_image(a['preview']) for a in ARENAS]
-        self._btn_fight   = RectButton(W//2-140, int(H*0.08), 280, 80, "FIGHT!",  (217,25,25))
-        self._btn_back    = RectButton(20,        int(H*0.93), 180, 60, "< BACK", (76,76,76), 26)
-
-    def handle_event(self, ev):
-        if ev.type not in (pygame.FINGERDOWN, pygame.MOUSEBUTTONDOWN): return
-        x, y = _touch_pos(ev)
-        if self._btn_back.hit(x,y):  return 'charselect'
-        if self._btn_fight.hit(x,y): return ('game', self._selected_char, self._enemy_char, self._selected)
-        for i, r in enumerate(self._arena_rects):
-            if r.collidepoint(x,y): self._selected = i; break
-
-    def draw(self, surf):
-        surf.fill((20,20,20))
-        draw_text(surf, "SELECT ARENA", 44, (255,255,255), W//2, int(H*0.90), bold=True)
-        for i, r in enumerate(self._arena_rects):
-            img = self._prev_imgs[i]
-            if img: draw_image_fit(surf, img, r)
-            else:   pygame.draw.rect(surf, (60,60,60), r, border_radius=10)
-            pygame.draw.rect(surf, (255,255,255) if i==self._selected else (100,100,100), r, 3, border_radius=10)
-            draw_text(surf, ARENAS[i]['name'], 28, (255,255,255), r.centerx, r.bottom+24, bold=True)
-        self._btn_fight.draw(surf); self._btn_back.draw(surf)
-
-# ── Game ──────────────────────────────────────────────────────────────────────
-class GameScreen(Screen):
-    def __init__(self):
-        self._selected_char = 0
-        self._enemy_char    = 0
-        self._arena_idx     = 0
-
-    def on_enter(self):
-        self._bg = load_image(ARENAS[self._arena_idx]['bg'])
-        pc = CHARACTERS[self._selected_char]
-        ec = CHARACTERS[self._enemy_char]
-        self._player   = Fighter(200, False, pc)
-        self._enemy    = Fighter(W - 200 - FIGHTER_W, True, ec)
-        self._joystick = VirtualJoystick()
-        br = W - 130; bm = H // 2
-        self._btns = {
-            'jump':  CircleButton(br-80,  bm-120, 52, "Y", (242,216,0)),
-            'punch': CircleButton(br-180, bm,     52, "X", (25,76,242)),
-            'kick':  CircleButton(br,     bm,     52, "B", (229,25,25)),
-            'crouch':CircleButton(br-80,  bm+120, 52, "A", (25,191,25)),
-        }
-        self._btn_pause      = pygame.Rect(W-95, 15, 80, 80)
-        self._btn_resume     = RectButton(W//2-160, int(H*0.55), 320, 90, "RESUME", (25,191,51))
-        self._btn_pause_menu = RectButton(W//2-160, int(H*0.40), 320, 90, "MENU",   (25,102,229))
-        self._btn_pause_quit = RectButton(W//2-160, int(H*0.25), 320, 90, "QUIT",   (204,25,25))
-        rounds = GAME_SETTINGS['rounds']
-        self._wins_needed  = rounds // 2 + 1
-        self._player_wins  = 0
-        self._enemy_wins   = 0
-        self._time_left    = float(GAME_SETTINGS['timer'])
-        self._paused       = False
-        self._round_active = False
-        self._round_ending = False
-        self._countdown    = 3
-        self._cd_timer     = 0.0
-        self._winner_text  = ''
-        self._winner_timer = 0.0
-        self._cd_imgs = {n: load_image(_p(f'Images/{n}.png')) for n in ('3','2','1','fight')}
-        self._win_imgs = {c['name']: load_image(_p(f"Images/{c['name']}_wins.png"))
-                         for c in CHARACTERS if not c['placeholder']}
-        self._crouch_finger = None
-        start_combat_music()
-
-    def on_leave(self):
-        stop_combat_music()
-        start_menu_music()
-
-    def handle_event(self, ev):
-        if ev.type in (pygame.FINGERDOWN, pygame.MOUSEBUTTONDOWN):
-            x, y = _touch_pos(ev)
-            fid  = getattr(ev, 'finger_id', 0)
-            if self._btn_pause.collidepoint(x,y) and not self._paused:
-                self._paused = True; self._round_active = False; return
-            if self._paused:
-                if self._btn_resume.hit(x,y):
-                    self._paused = False; self._round_active = True; return
-                if self._btn_pause_menu.hit(x,y): return 'menu'
-                if self._btn_pause_quit.hit(x,y): return 'quit'
-                return
-            if not self._round_active: return
-            self._joystick.handle_down(x, y, fid)
-            if self._btns['jump'].hit(x,y):   self._player.jump()
-            if self._btns['punch'].hit(x,y):  self._player.start_attack('punch')
-            if self._btns['kick'].hit(x,y):   self._player.start_attack('kick')
-            if self._btns['crouch'].hit(x,y):
-                self._player.crouch(True); self._crouch_finger = fid
-
-        elif ev.type in (pygame.FINGERMOTION, pygame.MOUSEMOTION):
-            fid = getattr(ev, 'finger_id', 0)
-            x, y = _touch_pos(ev)
-            self._joystick.handle_move(x, y, fid)
-
-        elif ev.type in (pygame.FINGERUP, pygame.MOUSEBUTTONUP):
-            fid = getattr(ev, 'finger_id', 0)
-            self._joystick.handle_up(fid)
-            if fid == self._crouch_finger:
-                self._player.crouch(False); self._crouch_finger = None
-
-    # ── AI ───────────────────────────────────────────────────────────────────
-    _ai_action_t = 0.0; _ai_crouch_t = 0.0; _ai_dir = 0
-
-    def _update_ai(self, dt):
-        p = self._player; e = self._enemy
-        dist = p.x - e.x
-        if   abs(dist) > 350: self._ai_dir = 1 if dist>0 else -1
-        elif abs(dist) < 120: self._ai_dir = -1 if dist>0 else 1
-        else:                  self._ai_dir = 0
-        e.update(dt, self._ai_dir, opponent_x=p.center_x)
-        e.x = max(0, min(e.x, W - FIGHTER_W))
-        self._ai_action_t += dt; self._ai_crouch_t += dt
-        if self._ai_action_t >= 0.8:
-            self._ai_action_t = 0.0
-            if abs(dist) < 420 and not e.is_attacking:
-                r = random.random()
-                if   r < 0.35: e.start_attack(random.choice(['punch','kick']))
-                elif r < 0.55: e.jump()
-                elif r < 0.70: e.crouch(True); self._ai_crouch_t = 0.0
-        if e.is_crouching and self._ai_crouch_t >= 0.4:
-            e.crouch(False)
-
-    def _check_collisions(self):
-        p = self._player; e = self._enemy
-        mx = FIGHTER_W * 0.30
-        if p.is_attacking:
-            if (p.x < e.x+FIGHTER_W-mx and p.x+FIGHTER_W > e.x+mx and
-                    p.y-FIGHTER_H < e.y-FIGHTER_H*0.15 and p.y > e.y-FIGHTER_H):
-                if p.attack_type=='punch' and not e.is_crouching: e.hp = max(0, e.hp-1)
-                elif p.attack_type=='kick' and e.y >= GROUND_Y-2: e.hp = max(0, e.hp-1)
+    def _update_enemy_source(self, *_):
+        e = self.ids.enemy_id
         if e.is_attacking:
-            if (e.x < p.x+FIGHTER_W-mx and e.x+FIGHTER_W > p.x+mx and
-                    e.y-FIGHTER_H < p.y-FIGHTER_H*0.15 and e.y > p.y-FIGHTER_H):
-                if e.attack_type=='punch' and not p.is_crouching: p.hp = max(0, p.hp-1)
-                elif e.attack_type=='kick' and p.y >= GROUND_Y-2: p.hp = max(0, p.hp-1)
+            src = self.enemy_punch_source if e.attack_type=='punch' else self.enemy_kick_source
+            if src: self.enemy_source = src
+        else:
+            self.enemy_source = self._enemy_idle_source
+
+    def _start_countdown(self):
+        self._round_active=False; self._round_ending=False
+        self.winner_image=''; self.countdown_image=_p('Images/3.png')
+        Clock.schedule_once(lambda dt: self._cd(2), 1)
+
+    def _cd(self, n, *_):
+        if n > 0:
+            self.countdown_image = _p(f'Images/{n}.png')
+            Clock.schedule_once(lambda dt: self._cd(n-1), 1)
+        else:
+            self.countdown_image = _p('Images/fight.png')
+            self._round_active   = True
+            Clock.schedule_once(lambda dt: setattr(self,'countdown_image',''), 0.8)
+
+    def _show_winner(self, winner):
+        name = self._player_name if winner=='player' else self._enemy_name
+        self.winner_image = _p(f'Images/{name}_wins.png')
+
+    def _reset_round(self):
+        p=self.ids.player_id; e=self.ids.enemy_id
+        p.hp=e.hp=250
+        p.x=200; p.y=p.ground_y; p.vel_x=p.vel_y=0
+        p.is_crouching=False; p.height=500; p.facing_left=False
+        e.x=self.width-700; e.y=e.ground_y; e.vel_x=e.vel_y=0
+        self._time_left=float(self._round_duration)
+        self.timer_text=str(self._round_duration)
+        self._ai_timer=self._ai_action_timer=self._ai_crouch_timer=0.0
+        self._ai_dir=0
+        self._start_countdown()
 
     def _end_round(self, winner):
         if self._round_ending: return
-        self._round_ending = True; self._round_active = False
-        pc = CHARACTERS[self._selected_char]; ec = CHARACTERS[self._enemy_char]
-        if winner == 'player': self._player_wins += 1; self._winner_text = pc['name']
-        else:                  self._enemy_wins  += 1; self._winner_text = ec['name']
-        self._winner_timer = 2.5
+        self._round_ending=True; self._round_active=False
+        if winner=='player': self.player_wins+=1
+        else: self.enemy_wins+=1
+        self._show_winner(winner)
+        if self.player_wins>=self.wins_needed or self.enemy_wins>=self.wins_needed:
+            Clock.schedule_once(lambda dt: self._go_to_menu(), 2.5)
+        else:
+            Clock.schedule_once(lambda dt: self._reset_round(), 2.5)
 
-    def _reset_round(self):
-        self._player.x = 200; self._player.y = GROUND_Y
-        self._player.vel_x = self._player.vel_y = 0
-        self._player.hp = 250; self._player.crouch(False)
-        self._enemy.x = W - 200 - FIGHTER_W; self._enemy.y = GROUND_Y
-        self._enemy.vel_x = self._enemy.vel_y = 0; self._enemy.hp = 250
-        self._time_left = float(GAME_SETTINGS['timer'])
-        self._winner_text = ''
-        self._round_ending = False
-        self._countdown = 3; self._cd_timer = 0.0
+    def _go_to_menu(self, *_):
+        self.paused=False; App.get_running_app().root.current='menu'
+
+    def _btn_up_down(self,w,t):
+        if w.collide_point(*t.pos) and self._round_active and not self.paused:
+            self.ids.player_id.jump()
+    def _btn_a_down(self,w,t):
+        if w.collide_point(*t.pos) and self._round_active and not self.paused:
+            self._do_attack(self.ids.player_id,'punch')
+    def _btn_b_down(self,w,t):
+        if w.collide_point(*t.pos) and self._round_active and not self.paused:
+            self._do_attack(self.ids.player_id,'kick')
+    def _btn_down_down(self,w,t):
+        if w.collide_point(*t.pos) and self._round_active and not self.paused:
+            p=self.ids.player_id; p.is_crouching=True; p.height=300
+    def _btn_down_up(self,w,t):
+        if w.collide_point(*t.pos):
+            p=self.ids.player_id; p.is_crouching=False; p.height=500
+    def _btn_pause_down(self,w,t):
+        if w.collide_point(*t.pos): self.paused=True; self._round_active=False
+    def _btn_resume_down(self,w,t):
+        if w.collide_point(*t.pos) and self.paused: self.paused=False; self._round_active=True
+    def _btn_pause_menu_down(self,w,t):
+        if w.collide_point(*t.pos) and self.paused: self._go_to_menu()
+    def _btn_pause_quit_down(self,w,t):
+        if w.collide_point(*t.pos) and self.paused: App.get_running_app().stop()
+
+    def _do_attack(self, fighter, atype):
+        if not fighter.is_attacking:
+            fighter.is_attacking=True; fighter.attack_type=atype
+            Clock.schedule_once(lambda dt: self._reset_atk(fighter), 0.35)
+    def _reset_atk(self, fighter):
+        fighter.is_attacking=False; fighter.attack_type=None
 
     def update(self, dt):
-        # Countdown phase
-        if not self._round_active and not self._round_ending:
-            self._cd_timer += dt
-            if self._countdown > 0 and self._cd_timer >= 1.0:
-                self._cd_timer -= 1.0; self._countdown -= 1
-            elif self._countdown == 0 and self._cd_timer >= 0.8:
-                self._round_active = True; self._countdown = -1
-            return
-
-        # Winner display phase
-        if self._round_ending:
-            self._winner_timer -= dt
-            if self._winner_timer <= 0:
-                if self._player_wins >= self._wins_needed or self._enemy_wins >= self._wins_needed:
-                    return 'menu'
-                self._reset_round()
-            return
-
-        if self._paused: return
-
+        if not self._round_active or self.paused: return
+        p=self.ids.player_id; e=self.ids.enemy_id
         self._time_left -= dt
         if self._time_left <= 0:
-            self._time_left = 0
-            self._end_round('player' if self._player.hp >= self._enemy.hp else 'enemy'); return
-
-        p = self._player; e = self._enemy
-        p.update(dt, self._joystick.dir_x, opponent_x=e.center_x)
-        p.x = max(0, min(p.x, W - FIGHTER_W))
+            self._time_left=0; self.timer_text='0'
+            self._end_round('player' if p.hp/250.0>=e.hp/250.0 else 'enemy')
+            return
+        self.timer_text = str(int(self._time_left)+1)
+        p.apply_physics(self.ids.joystick_id.dir_x, opponent_x=e.center_x)
+        p.x = max(0, min(p.x, self.width-p.width))
         self._update_ai(dt)
         self._check_collisions()
-        if p.hp <= 0: self._end_round('enemy')
-        elif e.hp <= 0: self._end_round('player')
+        if p.hp<=0: self._end_round('enemy')
+        elif e.hp<=0: self._end_round('player')
 
-    def draw(self, surf):
-        # Background
-        if self._bg:
-            bg = pygame.transform.smoothscale(self._bg, (W, H))
-            surf.blit(bg, (0,0))
+    def _check_collisions(self):
+        p=self.ids.player_id; e=self.ids.enemy_id
+        if p.is_attacking:
+            mx=e.width*0.30
+            if (p.x<e.x+e.width-mx and p.x+p.width>e.x+mx
+                    and p.y<e.y+e.height*0.85 and p.y+p.height>e.y):
+                if p.attack_type=='punch' and not e.is_crouching: e.hp=max(0,e.hp-1)
+                elif p.attack_type=='kick' and e.y<=e.ground_y:   e.hp=max(0,e.hp-1)
+        if e.is_attacking:
+            mx=p.width*0.30
+            if (e.x<p.x+p.width-mx and e.x+e.width>p.x+mx
+                    and e.y<p.y+p.height*0.85 and e.y+e.height>p.y):
+                if e.attack_type=='punch' and not p.is_crouching: p.hp=max(0,p.hp-1)
+                elif e.attack_type=='kick' and p.y<=p.ground_y:   p.hp=max(0,p.hp-1)
+
+    _ai_timer=0.0; _ai_action_timer=0.0; _ai_dir=0; _ai_crouch_timer=0.0
+
+    def _update_ai(self, dt):
+        p=self.ids.player_id; e=self.ids.enemy_id
+        self._ai_action_timer+=dt; self._ai_crouch_timer+=dt
+        dist=p.x-e.x
+        if abs(dist)>350:   self._ai_dir=1 if dist>0 else -1
+        elif abs(dist)<120: self._ai_dir=-1 if dist>0 else 1
+        else:               self._ai_dir=0
+        e.apply_physics(self._ai_dir, opponent_x=p.center_x)
+        e.x=max(0, min(e.x, self.width-e.width))
+        if self._ai_action_timer>=0.8:
+            self._ai_action_timer=0.0
+            if abs(dist)<420 and not e.is_attacking:
+                roll=random.random()
+                if roll<0.35:   self._do_attack(e, random.choice(['punch','kick']))
+                elif roll<0.55: e.jump()
+                elif roll<0.70: e.is_crouching=True; e.height=300; self._ai_crouch_timer=0.0
+        if e.is_crouching and self._ai_crouch_timer>=0.4:
+            e.is_crouching=False; e.height=500
+
+
+class SplashScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(self._go_to_menu, 5)
+    def _go_to_menu(self, dt):
+        App.get_running_app().start_music()
+        self.manager.current='menu'
+
+
+class MenuScreen(Screen):
+    def on_kv_post(self, base_widget):
+        self.ids.btn_start.bind(on_touch_down=lambda w,t: self.manager.__setattr__('current','charselect') if w.collide_point(*t.pos) else None)
+        self.ids.btn_options.bind(on_touch_down=lambda w,t: self.manager.__setattr__('current','options') if w.collide_point(*t.pos) else None)
+        self.ids.btn_quit.bind(on_touch_down=lambda w,t: App.get_running_app().stop() if w.collide_point(*t.pos) else None)
+
+
+class OptionsScreen(Screen):
+    tmp_music_on = BooleanProperty(True)
+    tmp_timer    = NumericProperty(90)
+    tmp_rounds   = NumericProperty(3)
+    show_confirm = BooleanProperty(False)
+
+    def on_enter(self):
+        self.tmp_music_on=GAME_SETTINGS['music_on']
+        self.tmp_timer=GAME_SETTINGS['timer']
+        self.tmp_rounds=GAME_SETTINGS['rounds']
+        self.show_confirm=False
+
+    def on_kv_post(self, base_widget):
+        self.ids.btn_music_toggle.bind(on_touch_down=lambda w,t: setattr(self,'tmp_music_on',True) if w.collide_point(*t.pos) and not self.show_confirm else None)
+        self.ids.btn_music_toggle_off.bind(on_touch_down=lambda w,t: setattr(self,'tmp_music_on',False) if w.collide_point(*t.pos) and not self.show_confirm else None)
+        for v in (10,60,90,120):
+            self.ids[f'btn_timer_{v}'].bind(on_touch_down=lambda w,t,val=v: setattr(self,'tmp_timer',val) if w.collide_point(*t.pos) and not self.show_confirm else None)
+        for v in (3,5):
+            self.ids[f'btn_rounds_{v}'].bind(on_touch_down=lambda w,t,val=v: setattr(self,'tmp_rounds',val) if w.collide_point(*t.pos) and not self.show_confirm else None)
+        self.ids.btn_save.bind(on_touch_down=self._save)
+        self.ids.btn_back.bind(on_touch_down=self._go_back)
+        self.ids.btn_confirm_save.bind(on_touch_down=self._confirm_save_and_back)
+        self.ids.btn_confirm_discard.bind(on_touch_down=self._confirm_discard)
+
+    def _apply(self):
+        GAME_SETTINGS['music_on']=self.tmp_music_on
+        GAME_SETTINGS['timer']=self.tmp_timer
+        GAME_SETTINGS['rounds']=self.tmp_rounds
+        app=App.get_running_app()
+        if app._music:
+            if self.tmp_music_on and app._music.state!='play': app._music.play()
+            elif not self.tmp_music_on: app._music.stop()
+
+    def _save(self,w,t):
+        if w.collide_point(*t.pos) and not self.show_confirm:
+            self._apply(); self.manager.current='menu'
+    def _go_back(self,w,t):
+        if w.collide_point(*t.pos) and not self.show_confirm:
+            changed=(self.tmp_music_on!=GAME_SETTINGS['music_on'] or
+                     self.tmp_timer!=GAME_SETTINGS['timer'] or
+                     self.tmp_rounds!=GAME_SETTINGS['rounds'])
+            if changed: self.show_confirm=True
+            else: self.manager.current='menu'
+    def _confirm_save_and_back(self,w,t):
+        if w.collide_point(*t.pos) and self.show_confirm:
+            self._apply(); self.show_confirm=False; self.manager.current='menu'
+    def _confirm_discard(self,w,t):
+        if w.collide_point(*t.pos) and self.show_confirm:
+            self.show_confirm=False; self.manager.current='menu'
+
+
+class CharSelectScreen(Screen):
+    selected                = NumericProperty(0)
+    idle_source             = StringProperty('')
+    idle_mirror             = BooleanProperty(False)
+    fullbody_source         = StringProperty('')
+    enemy_idle_source       = StringProperty('')
+    enemy_idle_mirror       = BooleanProperty(False)
+    enemy_fullbody_source   = StringProperty('')
+    enemy_placeholder       = BooleanProperty(False)
+    enemy_placeholder_color = ListProperty([0.5,0.5,0.5,1])
+    _confirmed              = BooleanProperty(False)
+    _enemy_idx              = NumericProperty(-1)
+    _timer_event=None; _roulette_event=None
+    _roulette_step=0; _roulette_target=0
+    _char_ids=['char_0','char_1','char_2','char_3','char_4','char_5','char_6','char_7']
+
+    def on_kv_post(self, base_widget):
+        for cid in self._char_ids:
+            self.ids[cid].bind(on_touch_down=self._on_char_touch)
+        self.ids.btn_fight.bind(on_touch_down=self._confirm)
+        self.ids.btn_back.bind(on_touch_down=self._go_back)
+        Clock.schedule_once(lambda dt: self._update_selection(), 0)
+
+    def on_leave(self):
+        self._cancel_roulette()
+        if self._timer_event: self._timer_event.cancel(); self._timer_event=None
+        self._confirmed=False
+        self.enemy_idle_source=self.enemy_fullbody_source=''
+        self.enemy_placeholder=False
+        if 'enemy_border' in self.ids: self.ids.enemy_border.opacity=0
+
+    def _on_char_touch(self,widget,touch):
+        if self._confirmed or not widget.collide_point(*touch.pos): return
+        for i,cid in enumerate(self._char_ids):
+            if self.ids[cid]==widget: self.selected=i; self._update_selection()
+
+    def _update_selection(self):
+        if 'char_name_label' not in self.ids: return
+        char=CHARACTERS[self.selected]
+        if not char['placeholder']:
+            self.ids.char_name_label.text=char['name']
+            self.idle_source=char['idle']; self.idle_mirror=char['mirror']
+            self.fullbody_source=char['fullbody']
         else:
-            surf.fill((30,30,50))
+            self.ids.char_name_label.text='???'
+            self.idle_source=''; self.idle_mirror=False; self.fullbody_source=''
 
-        # Ground shadow
-        for f in (self._player, self._enemy):
-            draw_ellipse_a(surf, (0,0,0), (int(f.x+30), GROUND_Y-8, 140, 24), 90)
+    def _cancel_roulette(self):
+        if self._roulette_event: self._roulette_event.cancel(); self._roulette_event=None
 
-        self._player.draw(surf)
-        self._enemy.draw(surf)
+    def _confirm(self,w,t):
+        if w.collide_point(*t.pos) and not self._confirmed:
+            self._confirmed=True
+            self._roulette_target=pick_enemy(self.selected)
+            self._roulette_step=0
+            self.ids.enemy_border.opacity=1
+            self._roulette_event=Clock.schedule_interval(self._roulette_tick,0.08)
+            Clock.schedule_once(self._roulette_end,1.5)
 
-        # HP bars
-        bar_w = W//2 - 120; bar_h = 36; bar_y = 20
-        for i, (ftr, ox) in enumerate(((self._player, 30), (self._enemy, W//2+90))):
-            pygame.draw.rect(surf, (25,25,25), (ox, bar_y, bar_w, bar_h), border_radius=4)
-            r = max(0, ftr.hp / 250.0)
-            c = (0,217,0) if r>0.5 else ((255,217,0) if r>0.1 else (229,25,25))
-            pygame.draw.rect(surf, c, (ox, bar_y, int(bar_w*r), bar_h), border_radius=4)
+    def _roulette_tick(self,dt):
+        idx=self._roulette_step%len(self._char_ids); self._roulette_step+=1
+        target=self.ids[self._char_ids[idx]]
+        self.ids.enemy_border.pos=(target.x-4,target.y-4)
 
-        # Win dots
-        dot_y = bar_y + bar_h + 10; dot_r = 12; dot_gap = 32
-        for i in range(self._wins_needed):
-            c = (51,204,51) if self._player_wins > i else (76,76,76)
-            pygame.draw.circle(surf, c, (30+i*dot_gap+dot_r, dot_y+dot_r), dot_r)
-        for i in range(self._wins_needed):
-            c = (229,51,51) if self._enemy_wins > i else (76,76,76)
-            pygame.draw.circle(surf, c, (W-30-i*dot_gap-dot_r, dot_y+dot_r), dot_r)
+    def _roulette_end(self,dt):
+        self._cancel_roulette()
+        ei=self._roulette_target; self._enemy_idx=ei
+        target=self.ids[self._char_ids[ei]]
+        self.ids.enemy_border.pos=(target.x-4,target.y-4)
+        enemy=CHARACTERS[ei]
+        if enemy['placeholder']:
+            self.enemy_placeholder=True
+            self.enemy_placeholder_color=enemy['placeholder_color']
+            self.enemy_idle_source=self.enemy_fullbody_source=''; self.enemy_idle_mirror=False
+        else:
+            self.enemy_placeholder=False
+            self.enemy_idle_source=enemy['idle']
+            self.enemy_idle_mirror=not enemy['mirror']
+            self.enemy_fullbody_source=enemy['fullbody']
+        self._timer_event=Clock.schedule_once(self._go_arenaselect,0.5)
 
-        # Timer
-        draw_text(surf, str(max(0, int(self._time_left)+1)), 56, (255,255,255), W//2, bar_y+bar_h//2+2, bold=True)
+    def _go_arenaselect(self,*_):
+        s=self.manager.get_screen('arenaselect')
+        s.selected_char=self.selected; s.enemy_char=self._enemy_idx
+        self.manager.current='arenaselect'
 
-        # Countdown
-        if not self._round_active and not self._round_ending and self._countdown >= 0:
-            key = str(self._countdown) if self._countdown > 0 else 'fight'
-            img = self._cd_imgs.get(key)
-            if img:
-                sc = min((H*0.45)/img.get_height(), (W*0.35)/img.get_width())
-                draw_image_centered(surf, img, W//2, H//2, scale=sc)
+    def _go_back(self,w,t):
+        if w.collide_point(*t.pos) and not self._confirmed:
+            self.manager.current='menu'
 
-        # Winner
-        if self._round_ending and self._winner_text:
-            img = self._win_imgs.get(self._winner_text)
-            if img:
-                draw_image_fit(surf, img, (int(W*0.15), int(H*0.36), int(W*0.70), int(H*0.28)))
 
-        # Joystick + buttons
-        self._joystick.draw(surf)
-        for b in self._btns.values(): b.draw(surf)
+class ArenaSelectScreen(Screen):
+    selected=NumericProperty(0); selected_char=NumericProperty(0); enemy_char=NumericProperty(0)
+    _arena_ids=['arena_0','arena_1']
 
-        # Pause button
-        if not self._paused:
-            s = pygame.Surface((80,80), pygame.SRCALPHA)
-            pygame.draw.circle(s, (0,0,0,115), (40,40), 40)
-            pygame.draw.rect(s, (255,255,255,204), (22,18,12,44), border_radius=3)
-            pygame.draw.rect(s, (255,255,255,204), (46,18,12,44), border_radius=3)
-            surf.blit(s, (W-95, 15))
+    def on_kv_post(self,base_widget):
+        for aid in self._arena_ids: self.ids[aid].bind(on_touch_down=self._on_arena_touch)
+        self.ids.btn_fight.bind(on_touch_down=self._go_fight)
+        self.ids.btn_back.bind(on_touch_down=self._go_back)
+        self._update_selection()
 
-        if self._paused:
-            ov = pygame.Surface((W,H), pygame.SRCALPHA); ov.fill((0,0,0,166)); surf.blit(ov,(0,0))
-            draw_text(surf, "PAUSE", 80, (255,255,0), W//2, int(H*0.72), bold=True)
-            self._btn_resume.draw(surf)
-            self._btn_pause_menu.draw(surf)
-            self._btn_pause_quit.draw(surf)
+    def _on_arena_touch(self,widget,touch):
+        if not widget.collide_point(*touch.pos): return
+        for i,aid in enumerate(self._arena_ids):
+            if self.ids[aid]==widget: self.selected=i; self._update_selection()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Main loop
-# ══════════════════════════════════════════════════════════════════════════════
-def main():
-    arenaselect = ArenaSelectScreen()
-    game        = GameScreen()
-    screens = {
-        'splash':     SplashScreen(),
-        'menu':       MenuScreen(),
-        'options':    OptionsScreen(),
-        'charselect': CharSelectScreen(),
-        'arenaselect':arenaselect,
-        'game':       game,
-    }
+    def _update_selection(self):
+        self.ids.arena_preview.source=ARENAS[self.selected]['preview']
+        target=self.ids[self._arena_ids[self.selected]]
+        self.ids.arena_border.pos=(target.x-3,target.y-3)
 
-    current_name = 'splash'
-    current      = screens[current_name]
-    current.on_enter()
+    def _go_fight(self,w,t):
+        if w.collide_point(*t.pos):
+            game=self.manager.get_screen('game')
+            game.selected_char=self.selected_char; game.enemy_char=self.enemy_char
+            game.bg_source=ARENAS[self.selected]['bg']
+            self.manager.current='game'
 
-    def switch(name, *args):
-        nonlocal current, current_name
-        current.on_leave()
-        current_name = name
-        current      = screens[name]
-        if name == 'arenaselect' and len(args) >= 2:
-            arenaselect._selected_char = args[0]
-            arenaselect._enemy_char    = args[1]
-        elif name == 'game' and len(args) >= 3:
-            game._selected_char = args[0]
-            game._enemy_char    = args[1]
-            game._arena_idx     = args[2]
-        current.on_enter()
+    def _go_back(self,w,t):
+        if w.collide_point(*t.pos): self.manager.current='charselect'
 
-    running = True
-    while running:
-        dt = clock.tick(FPS) / 1000.0
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
-            else:
-                result = current.handle_event(event)
-                if result:
-                    if result == 'quit': running = False
-                    elif isinstance(result, tuple): switch(result[0], *result[1:])
-                    else: switch(result)
+class GameScreen(Screen):
+    selected_char=NumericProperty(0); enemy_char=NumericProperty(0)
+    bg_source=StringProperty(''); _update_event=None
 
-        result = current.update(dt)
-        if result:
-            if result == 'quit': running = False
-            elif isinstance(result, tuple): switch(result[0], *result[1:])
-            elif isinstance(result, str):   switch(result)
+    def on_enter(self):
+        game=self.ids.game_widget
+        game.selected_char=self.selected_char; game.enemy_char=self.enemy_char
+        game.bg_source=self.bg_source; game.paused=False
+        game.player_wins=game.enemy_wins=0
+        game.winner_image=game.countdown_image=''
+        game._round_active=game._round_ending=False
+        game._setup_player(); game._setup_enemy()
+        p=game.ids.player_id; e=game.ids.enemy_id
+        p.hp=e.hp=250
+        p.x=200; p.y=p.ground_y; p.vel_x=p.vel_y=0
+        p.is_crouching=p.is_attacking=False; p.attack_type=None
+        p.height=500; p.facing_left=False
+        e.x=game.width-700; e.y=e.ground_y; e.vel_x=e.vel_y=0
+        self._update_event=Clock.schedule_interval(game.update,1.0/60.0)
+        Clock.schedule_once(lambda dt: game._start_countdown(),0.3)
+        App.get_running_app().start_combat_music()
 
-        screen.fill((0,0,0))
-        current.draw(screen)
-        pygame.display.flip()
+    def on_leave(self):
+        if self._update_event: self._update_event.cancel(); self._update_event=None
+        App.get_running_app().stop_combat_music()
 
-    pygame.quit()
-    sys.exit()
 
-if __name__ == '__main__':
-    main()
+class GameApp(App):
+    kv_file=None; _music=None; _combat=None
+
+    def _load_sound(self,*paths):
+        for p in paths:
+            full=_p(p)
+            if os.path.exists(full):
+                try:
+                    s=SoundLoader.load(full)
+                    if s: return s
+                except Exception: pass
+        return None
+
+    def start_music(self):
+        if self._music:
+            if self._music.state!='play' and GAME_SETTINGS['music_on']: self._music.play()
+            return
+        s=self._load_sound('Audio/jingle.ogg','Audio/jingle.mp3')
+        if s: s.loop=True; (s.play() if GAME_SETTINGS['music_on'] else None); self._music=s
+
+    def start_combat_music(self):
+        if self._music and self._music.state=='play': self._music.stop()
+        if not self._combat:
+            self._combat=self._load_sound('Audio/combat.ogg','Audio/combat.mp3')
+            if self._combat: self._combat.loop=True
+        if self._combat and self._combat.state!='play': self._combat.play()
+
+    def stop_combat_music(self):
+        if self._combat and self._combat.state=='play': self._combat.stop()
+        if self._music and GAME_SETTINGS['music_on']: self._music.play()
+
+    def on_pause(self): return True
+    def on_resume(self): pass
+
+    def build(self):
+        sm=ScreenManager(transition=NoTransition())
+        for name,cls in [('splash',SplashScreen),('menu',MenuScreen),
+                         ('options',OptionsScreen),('charselect',CharSelectScreen),
+                         ('arenaselect',ArenaSelectScreen),('game',GameScreen)]:
+            sm.add_widget(cls(name=name))
+        sm.current='splash'
+        return sm
+
+if __name__=='__main__':
+    GameApp().run()

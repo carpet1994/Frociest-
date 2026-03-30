@@ -10,13 +10,19 @@ source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
 version = 0.1
 
-# La recipe pygame custom in p4a_recipes/pygame/ forza pygame==2.6.1
-# che non usa più longintrepr.h (rimosso in Python 3.11.10+).
-requirements = python3,pygame,android,pyjnius
+# FIX ANIMAZIONI GIF: aggiungere ffpyplayer come image provider per i GIF.
+# "kivy" da solo non carica i GIF animati su Android.
+# ffpyplayer è il provider ufficiale Kivy per video e GIF animati.
+requirements = python3,kivy,android,pyjnius,ffpyplayer
 
-# Punta alla cartella con la recipe pygame custom (relativa a source.dir)
-p4a.local_recipes = ./p4a_recipes
+# Forza ffpyplayer come provider per i video/gif (Kivy lo usa automaticamente
+# se presente, ma esplicitarlo evita che venga saltato in alcune build)
+android.add_aars =
 
+# FIX LANDSCAPE: queste tre righe insieme garantiscono il landscape su Android.
+# - orientation nel [app] imposta il manifest AndroidManifest.xml
+# - android.manifest.screenOrientation lo rinforza nel tag <activity>
+# - android.orientation è il vecchio campo buildozer (compatibilità)
 orientation = landscape
 android.orientation = landscape
 android.manifest.screenOrientation = sensorLandscape
@@ -25,13 +31,14 @@ fullscreen = 1
 
 icon.filename = %(source.dir)s/icon.png
 
+# Permessi necessari
 android.permissions = INTERNET
+
 android.api = 34
 android.minapi = 21
 android.ndk = 25b
 android.sdk = 34
 android.archs = arm64-v8a
-
 
 [buildozer]
 log_level = 2
