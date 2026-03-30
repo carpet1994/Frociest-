@@ -17,6 +17,24 @@
     "frame_h": 64,
     "delay_ms": 200
   },
+  "Jules_punch": {
+    "n_frames": 1,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Jules_kick": {
+    "n_frames": 1,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Jules_crouch": {
+    "n_frames": 1,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
   "poz_idle": {
     "n_frames": 8,
     "frame_w": 64,
@@ -31,6 +49,24 @@
   },
   "poz_jump": {
     "n_frames": 9,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Poz_punch": {
+    "n_frames": 1,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Poz_kick": {
+    "n_frames": 1,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Poz_crouch": {
+    "n_frames": 1,
     "frame_w": 64,
     "frame_h": 64,
     "delay_ms": 200
@@ -61,6 +97,12 @@
   },
   "Ruben_kick": {
     "n_frames": 7,
+    "frame_w": 64,
+    "frame_h": 64,
+    "delay_ms": 200
+  },
+  "Ruben_crouch": {
+    "n_frames": 1,
     "frame_w": 64,
     "frame_h": 64,
     "delay_ms": 200
