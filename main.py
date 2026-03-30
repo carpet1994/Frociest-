@@ -1,11 +1,43 @@
 import random
 import os
+import time
 
-# ── Configurazione Kivy PRIMA di qualsiasi altro import kivy ──────────────────
+# ── Orientamento forzato su Android (PRIMA di Kivy) ──────────────────────────
+# Su Android il Config di Kivy viene ignorato: bisogna usare le API Java.
+from kivy.utils import platform
+
+if platform == 'android':
+    try:
+        from android.runnable import run_on_ui_thread  # type: ignore
+        from jnius import autoclass                    # type: ignore
+
+        ActivityInfo = autoclass('android.content.pm.ActivityInfo')
+
+        # Prova tutti i namespace noti per PythonActivity
+        _PythonActivity = None
+        for _ns in ('org.kivy.android.PythonActivity',
+                    'org.pygame.android.PythonActivity',
+                    'org.beeware.android.MainActivity'):
+            try:
+                _PythonActivity = autoclass(_ns)
+                break
+            except Exception:
+                pass
+
+        if _PythonActivity is not None:
+            @run_on_ui_thread
+            def _force_landscape():
+                _PythonActivity.mActivity.setRequestedOrientation(
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+            _force_landscape()
+            time.sleep(0.4)  # lascia che Android applichi la rotazione
+    except Exception:
+        pass
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Configurazione Kivy ───────────────────────────────────────────────────────
 from kivy.config import Config
 Config.set('graphics', 'orientation', 'landscape')
-Config.set('graphics', 'width', '1280')
-Config.set('graphics', 'height', '720')
 Config.set('kivy', 'log_level', 'warning')
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -19,25 +51,14 @@ from kivy.core.window import Window
 from kivy.core.audio import SoundLoader
 from kivy.vector import Vector
 from kivy.lang import Builder
-from kivy.utils import platform
 
-# ── Orientamento forzato su Android ──────────────────────────────────────────
-if platform == 'android':
-    try:
-        from android.runnable import run_on_ui_thread
-        from jnius import autoclass
-        PythonActivity = autoclass('org.kivy.android.PythonActivity')
-        ActivityInfo   = autoclass('android.content.pm.ActivityInfo')
-
-        @run_on_ui_thread
-        def _force_landscape():
-            PythonActivity.mActivity.setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
-
-        _force_landscape()
-    except Exception:
-        pass
-# ─────────────────────────────────────────────────────────────────────────────
+# FIX ANIMAZIONI GIF: forza ffpyplayer come provider per le immagini/video.
+# Senza questo, Kivy su Android usa il provider SDL2 che non supporta i GIF.
+from kivy.core.image import Image as CoreImage  # noqa - registra i provider
+try:
+    import ffpyplayer  # noqa - assicura che ffpyplayer sia importato
+except ImportError:
+    pass
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 
