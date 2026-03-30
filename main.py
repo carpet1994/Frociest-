@@ -5,30 +5,60 @@ Desktop: pip install pygame
 """
 
 import os, sys, random, math
-os.environ.setdefault('SDL_AUDIODRIVER', 'openslES')   # Android audio
 
 # ── Android: forza landscape prima di init ────────────────────────────────────
+ON_ANDROID = False
 try:
     import android                                      # type: ignore
     from android.runnable import run_on_ui_thread       # type: ignore
     from jnius import autoclass                         # type: ignore
     import time
-    PythonActivity = autoclass('org.kivy.android.PythonActivity')
-    ActivityInfo   = autoclass('android.content.pm.ActivityInfo')
-    @run_on_ui_thread
-    def _force_landscape():
-        PythonActivity.mActivity.setRequestedOrientation(
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
-    _force_landscape()
-    time.sleep(0.35)   # attende che Android applichi la rotazione
+
+    # FIX 1: prova entrambi i namespace (pygame-ce e kivy) per compatibilità
+    PythonActivity = None
+    for _ns in ('org.kivy.android.PythonActivity',
+                'org.beeware.android.MainActivity',
+                'org.pygame.android.PythonActivity'):
+        try:
+            PythonActivity = autoclass(_ns)
+            break
+        except Exception:
+            pass
+
+    ActivityInfo = autoclass('android.content.pm.ActivityInfo')
+
+    if PythonActivity is not None:
+        @run_on_ui_thread
+        def _force_landscape():
+            PythonActivity.mActivity.setRequestedOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+        _force_landscape()
+        time.sleep(0.35)   # attende che Android applichi la rotazione
+
     ON_ANDROID = True
 except Exception:
     ON_ANDROID = False
 
+# FIX 2: su Android 14+ openslES è deprecato, usare AAudio o lasciare SDL scegliere
+if ON_ANDROID:
+    # Non forzare openslES: SDL2 su Android 14/15 preferisce AAudio
+    os.environ.pop('SDL_AUDIODRIVER', None)
+
 import pygame
-pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+
+# FIX 3: pre_init prima di pygame.init(), con buffer più grande per Android
+if ON_ANDROID:
+    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
+else:
+    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+
 pygame.init()
-pygame.mixer.init()
+
+# FIX 4: init mixer separato con fallback silenzioso se l'audio fallisce
+try:
+    pygame.mixer.init()
+except Exception:
+    pass  # il gioco gira anche senza audio, non crashare
 
 W, H = 1280, 720
 if ON_ANDROID:
