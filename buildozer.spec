@@ -8,7 +8,7 @@ author = Tappeto Volante
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
-version = 0.1
+version = 0.2
 
 # ffpyplayer RIMOSSO: non compila con Cython 3.
 # Le animazioni usano SheetAnimImage (sprite sheet PNG) definito in main.py.
