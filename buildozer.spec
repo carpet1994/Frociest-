@@ -8,13 +8,14 @@ author = Tappeto Volante
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
-version = 0.2
+# v0.3: animazioni crouch dedicate per Jules, Poz, Ruben
+version = 0.3
 
-# ffpyplayer RIMOSSO: non compila con Cython 3.
-# Le animazioni usano SheetAnimImage (sprite sheet PNG) definito in main.py.
+# Nota: NON usare ffpyplayer (incompatibile con Cython 3).
+# Le animazioni usano SheetAnimImage con sprite sheet PNG (definito in main.py).
 requirements = python3,kivy,android,pyjnius
 
-# Landscape: tutte e tre le righe sono necessarie insieme.
+# Landscape
 orientation = landscape
 android.orientation = landscape
 android.manifest.screenOrientation = sensorLandscape
@@ -24,6 +25,14 @@ fullscreen = 1
 icon.filename = %(source.dir)s/icon.png
 
 android.permissions = INTERNET
+
+# FIX AGGIORNAMENTO: stesso package.name + package.domain + versione crescente
+# permette l'installazione come aggiornamento su versioni precedenti.
+# android.numeric_version deve essere strettamente crescente ad ogni release.
+android.numeric_version = 3
+
+# Firma debug: Android permette aggiornamento solo se la firma è la stessa.
+# In debug mode buildozer usa sempre la stessa debug keystore -> OK.
 
 android.api = 34
 android.minapi = 21
