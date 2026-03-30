@@ -1,0 +1,89 @@
+name: Frociest Rumble OLD - Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+
+      - name: Checkout codice
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installa dipendenze di sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git libffi-dev libssl-dev \
+            zlib1g-dev liblzma-dev libbz2-dev libreadline-dev \
+            libsqlite3-dev openjdk-17-jdk unzip autoconf libtool \
+            pkg-config libltdl-dev cmake ninja-build \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+
+      - name: Forza Java 17
+        run: |
+          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+
+      - name: Installa Buildozer e dipendenze Python
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install "cython==3.0.11"
+          pip install "buildozer==1.5.0"
+          pip install "python-for-android==2023.9.16"
+
+      - name: Cache Android SDK/NDK e build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+          key: buildozer-kivy-${{ hashFiles('buildozer.spec') }}-v1
+          restore-keys: |
+            buildozer-kivy-
+
+      - name: Accetta licenze Android SDK
+        run: |
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "d975f751698a77b662f1254ddbeed3901e976f5a" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
+          echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > ~/.buildozer/android/platform/android-sdk/licenses/google-gdk-license
+
+      - name: Build APK
+        run: |
+          yes | buildozer -v android debug 2>&1 | tee build.log
+          echo "Exit code: ${PIPESTATUS[1]}"
+
+      - name: Mostra ultimi log in caso di errore
+        if: failure()
+        run: tail -300 build.log || true
+
+      - name: Carica APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrociestRumble-OLD-beta
+          path: bin/*.apk
+          retention-days: 30
+
+      - name: Carica log di build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
