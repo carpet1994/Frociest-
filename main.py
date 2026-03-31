@@ -169,10 +169,9 @@ class SheetAnimImage(Widget):
         with self.canvas:
             GColor(1, 1, 1, 1)
             if self.scale_x < 0:
-                # Flip orizzontale tramite tex_coords (compatibile con OpenGL ES / Android)
                 Rectangle(texture=tex,
-                           pos=self.pos, size=self.size,
-                           tex_coords=(1, 0, 0, 0, 0, 1, 1, 1))
+                           pos=(self.x + self.width, self.y),
+                           size=(-self.width, self.height))
             else:
                 Rectangle(texture=tex, pos=self.pos, size=self.size)
 
@@ -616,7 +615,7 @@ class OptionsScreen(Screen):
     def on_kv_post(self, base_widget):
         self.ids.btn_music_toggle.bind(on_touch_down=lambda w,t: setattr(self,'tmp_music_on',True) if w.collide_point(*t.pos) and not self.show_confirm else None)
         self.ids.btn_music_toggle_off.bind(on_touch_down=lambda w,t: setattr(self,'tmp_music_on',False) if w.collide_point(*t.pos) and not self.show_confirm else None)
-        for v in (10, 60, 90, 120):
+        for v in (60, 90, 120):
             self.ids[f'btn_timer_{v}'].bind(on_touch_down=lambda w,t,val=v: setattr(self,'tmp_timer',val) if w.collide_point(*t.pos) and not self.show_confirm else None)
         for v in (3, 5):
             self.ids[f'btn_rounds_{v}'].bind(on_touch_down=lambda w,t,val=v: setattr(self,'tmp_rounds',val) if w.collide_point(*t.pos) and not self.show_confirm else None)
