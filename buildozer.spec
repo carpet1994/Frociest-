@@ -9,7 +9,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
 # v0.5: animazioni crouch dedicate per Jules, Poz, Ruben e aggiunte le anteprime di Crimli e Refa
-version = 0.5
+version = 0.5.1
 
 # Nota: NON usare ffpyplayer (incompatibile con Cython 3).
 # Le animazioni usano SheetAnimImage con sprite sheet PNG (definito in main.py).
@@ -29,7 +29,7 @@ android.permissions = INTERNET
 # FIX AGGIORNAMENTO: stesso package.name + package.domain + versione crescente
 # permette l'installazione come aggiornamento su versioni precedenti.
 # android.numeric_version deve essere strettamente crescente ad ogni release.
-android.numeric_version = 5
+android.numeric_version = 6
 
 # Firma debug: Android permette aggiornamento solo se la firma è la stessa.
 # In debug mode buildozer usa sempre la stessa debug keystore -> OK.
