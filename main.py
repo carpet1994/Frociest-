@@ -381,6 +381,11 @@ class FighterGame(Widget):
     enemy_kick_source       = StringProperty('')
     enemy_crouch_source     = StringProperty('')   # ← nuovo
     paused   = BooleanProperty(False)
+    # Stato per ombre dinamiche
+    player_is_crouching = BooleanProperty(False)
+    player_is_jumping   = BooleanProperty(False)
+    enemy_is_crouching  = BooleanProperty(False)
+    enemy_is_jumping    = BooleanProperty(False)
     player_x = NumericProperty(200)
     enemy_x  = NumericProperty(600)
 
@@ -397,6 +402,10 @@ class FighterGame(Widget):
                attack_type=self._update_enemy_source,
                is_crouching=self._update_enemy_source,
                current_source=lambda i,v: setattr(self,'enemy_source',v) if not i.is_attacking else None)
+        p.bind(is_crouching=lambda i,v: setattr(self,'player_is_crouching',v),
+               y=lambda i,v: setattr(self,'player_is_jumping', v > i.ground_y))
+        e.bind(is_crouching=lambda i,v: setattr(self,'enemy_is_crouching',v),
+               y=lambda i,v: setattr(self,'enemy_is_jumping', v > i.ground_y))
         self.player_x = p.x; self.enemy_x = e.x
         self.ids.btn_jump.bind(on_touch_down=self._btn_up_down)
         self.ids.btn_punch.bind(on_touch_down=self._btn_a_down)

@@ -34,13 +34,13 @@
         Color:
             rgba: 0, 0, 0, 0.35
         Ellipse:
-            pos: self.player_x + 80, 35
-            size: 340, 60
+            pos: self.player_x + 80 - (20 if self.player_is_crouching else (10 if self.player_is_jumping else 0)), 35
+            size: (380 if self.player_is_crouching else (300 if self.player_is_jumping else 340)), 60
         Color:
             rgba: 0, 0, 0, 0.35
         Ellipse:
-            pos: self.enemy_x + 80, 35
-            size: 340, 60
+            pos: self.enemy_x + 80 - (20 if self.enemy_is_crouching else (10 if self.enemy_is_jumping else 0)), 35
+            size: (380 if self.enemy_is_crouching else (300 if self.enemy_is_jumping else 340)), 60
 
     # ── FIGHTER PLAYER (solo hitbox logica, niente canvas) ─────
     Fighter:
@@ -53,7 +53,7 @@
         id: player_img
         source: player_id.current_source
         size: player_id.size
-        pos: player_id.pos
+        pos: player_id.x, player_id.y - (5 if player_id.is_crouching else 0)
         scale_x: player_id.scale_x
 
     Widget:
@@ -84,7 +84,7 @@
         id: enemy_img
         source: root.enemy_source if not root.enemy_is_placeholder else ''
         size: enemy_id.size
-        pos: enemy_id.pos
+        pos: enemy_id.x, enemy_id.y - (5 if enemy_id.is_crouching else 0)
         scale_x: enemy_id.scale_x
         opacity: 0 if root.enemy_is_placeholder else 1
 
