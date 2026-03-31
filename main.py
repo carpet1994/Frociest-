@@ -169,9 +169,10 @@ class SheetAnimImage(Widget):
         with self.canvas:
             GColor(1, 1, 1, 1)
             if self.scale_x < 0:
+                # Flip orizzontale tramite tex_coords (compatibile con OpenGL ES / Android)
                 Rectangle(texture=tex,
-                           pos=(self.x + self.width, self.y),
-                           size=(-self.width, self.height))
+                           pos=self.pos, size=self.size,
+                           tex_coords=(1, 0, 0, 0, 0, 1, 1, 1))
             else:
                 Rectangle(texture=tex, pos=self.pos, size=self.size)
 
