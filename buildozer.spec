@@ -8,7 +8,7 @@ author = Tappeto Volante
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,gif,ogg,mp3,json
 
-# v0.3: animazioni crouch dedicate per Jules, Poz, Ruben e aggiunte le anteprime di Crimli e Refa
+# v0.5: animazioni crouch dedicate per Jules, Poz, Ruben e aggiunte le anteprime di Crimli e Refa
 version = 0.5
 
 # Nota: NON usare ffpyplayer (incompatibile con Cython 3).
