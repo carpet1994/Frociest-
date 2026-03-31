@@ -170,8 +170,8 @@ class SheetAnimImage(Widget):
             GColor(1, 1, 1, 1)
             if self.scale_x < 0:
                 Rectangle(texture=tex,
-                           pos=(self.x + self.width, self.y),
-                           size=(-self.width, self.height))
+                           pos=self.pos, size=self.size,
+                           tex_coords=(1, 0, 0, 0, 0, 1, 1, 1))
             else:
                 Rectangle(texture=tex, pos=self.pos, size=self.size)
 
@@ -209,18 +209,19 @@ def _char(name, folder, prefix, mirror, preview_name=None):
         'placeholder_color': None,
     }
 
-def _ph(color):
-    return {'name':'???','placeholder':True,'placeholder_color':color,
-            'fullbody':'','preview':'','idle':'','walk':'','jump':'',
-            'punch':'','kick':'','crouch':'','mirror':False}
+def _coming_soon(name):
+    return {'name': name, 'placeholder': False, 'coming_soon': True,
+            'placeholder_color': None,
+            'fullbody': _p(f'PG/Preview/{name}_fullbody.png'),
+            'preview':  _p(f'PG/Preview/{name}_preview.png'),
+            'idle':'','walk':'','jump':'','punch':'','kick':'','crouch':'','mirror':False}
 
 CHARACTERS = [
     _char('Jules', 'Jules', 'Jules', False, preview_name='Giuse_preview'),
     _char('Poz',   'Poz',   'Poz',   True),
     _char('Ruben', 'Ruben', 'Ruben', False),
-    _ph([0.9, 0.7, 0.1, 1]), _ph([0.8, 0.3, 0.9, 1]),
-    _ph([0.1, 0.8, 0.8, 1]), _ph([0.95,0.5, 0.1, 1]),
-    _ph([0.5, 0.5, 0.5, 1]),
+    _coming_soon('Crimli'),
+    _coming_soon('Refa'),
 ]
 
 GAME_SETTINGS = {'music_on': True, 'timer': 90, 'rounds': 3}
@@ -228,7 +229,8 @@ GAME_SETTINGS = {'music_on': True, 'timer': 90, 'rounds': 3}
 
 def pick_enemy(player_index):
     choices = [i for i in range(len(CHARACTERS))
-               if i != player_index and not CHARACTERS[i]['placeholder']]
+               if i != player_index and not CHARACTERS[i]['placeholder']
+               and not CHARACTERS[i].get('coming_soon')]
     return random.choice(choices)
 
 
@@ -664,11 +666,12 @@ class CharSelectScreen(Screen):
     enemy_fullbody_source   = StringProperty('')
     enemy_placeholder       = BooleanProperty(False)
     enemy_placeholder_color = ListProperty([0.5, 0.5, 0.5, 1])
+    coming_soon_msg         = StringProperty('')
     _confirmed              = BooleanProperty(False)
     _enemy_idx              = NumericProperty(-1)
     _timer_event = None; _roulette_event = None
     _roulette_step = 0;  _roulette_target = 0
-    _char_ids = ['char_0','char_1','char_2','char_3','char_4','char_5','char_6','char_7']
+    _char_ids = ['char_0','char_1','char_2','char_3','char_4']
 
     def on_kv_post(self, base_widget):
         for cid in self._char_ids:
@@ -693,10 +696,11 @@ class CharSelectScreen(Screen):
     def _update_selection(self):
         if 'char_name_label' not in self.ids: return
         char = CHARACTERS[self.selected]
+        self.coming_soon_msg = f"{char['name']} will arrive soon" if char.get('coming_soon') else ''
         if not char['placeholder']:
             self.ids.char_name_label.text = char['name']
-            self.idle_source    = char['idle']
-            self.idle_mirror    = char['mirror']
+            self.idle_source     = char['idle']
+            self.idle_mirror     = char['mirror']
             self.fullbody_source = char['fullbody']
         else:
             self.ids.char_name_label.text = '???'
@@ -707,6 +711,8 @@ class CharSelectScreen(Screen):
 
     def _confirm(self, w, t):
         if w.collide_point(*t.pos) and not self._confirmed:
+            if CHARACTERS[self.selected].get('coming_soon'):
+                return
             self._confirmed      = True
             self._roulette_target = pick_enemy(self.selected)
             self._roulette_step  = 0
