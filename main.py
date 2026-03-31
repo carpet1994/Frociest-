@@ -109,11 +109,20 @@ class SheetAnimImage(Widget):
 
     def _load_frames(self, gif_path):
         _load_sheet_meta()
-        anim_name  = os.path.splitext(os.path.basename(gif_path))[0]
-        sheet_path = gif_path.replace('.gif', '_sheet.png')
-        # Crouch non ha gif: il path è già un .gif fittizio, lo sheet è il PNG diretto
-        if not sheet_path.endswith('_sheet.png'):
-            sheet_path = gif_path  # fallback
+        basename_no_ext = os.path.splitext(os.path.basename(gif_path))[0]
+        if gif_path.endswith('.png'):
+            # Path diretto a un _sheet.png (punch, kick, crouch senza gif)
+            sheet_path = gif_path
+            # Rimuove il suffisso '_sheet' per trovare la chiave nel JSON
+            # es. 'Jules_punch_sheet' -> 'Jules_punch'
+            if basename_no_ext.endswith('_sheet'):
+                anim_name = basename_no_ext[:-6]  # rimuove '_sheet'
+            else:
+                anim_name = basename_no_ext
+        else:
+            # Path a un .gif: lo sheet è il corrispettivo _sheet.png
+            anim_name  = basename_no_ext
+            sheet_path = gif_path.replace('.gif', '_sheet.png')
         meta = _SHEET_META.get(anim_name)
 
         if os.path.exists(sheet_path) and meta:
@@ -193,6 +202,10 @@ ARENAS = [
 
 def _char(name, folder, prefix, mirror, preview_name=None):
     pv = preview_name or f'{name}_preview'
+    # Per punch e kick usiamo direttamente il _sheet.png.
+    # Se esiste anche il .gif (es. Ruben), il codice lo usa come path ma poi
+    # deriva lo sheet; se non esiste (Jules, Poz) il path .gif causa canvas.clear().
+    # Passare sempre il _sheet.png è la scelta sicura e coerente.
     return {
         'name':        name,
         'preview':     _p(f'PG/Preview/{pv}.png'),
@@ -200,9 +213,9 @@ def _char(name, folder, prefix, mirror, preview_name=None):
         'idle':        _p(f'PG/{folder}/{prefix}_idle.gif'),
         'walk':        _p(f'PG/{folder}/{prefix}_walk.gif'),
         'jump':        _p(f'PG/{folder}/{prefix}_jump.gif'),
-        'punch':       _p(f'PG/{folder}/{prefix}_punch.gif'),
-        'kick':        _p(f'PG/{folder}/{prefix}_kick.gif'),
-        # crouch: punta direttamente al PNG sheet (frame singolo)
+        'punch':       _p(f'PG/{folder}/{prefix}_punch_sheet.png'),
+        'kick':        _p(f'PG/{folder}/{prefix}_kick_sheet.png'),
+        # crouch: singolo frame PNG sheet
         'crouch':      _p(f'PG/{folder}/{prefix}_crouch_sheet.png'),
         'mirror':      mirror,
         'placeholder': False,
